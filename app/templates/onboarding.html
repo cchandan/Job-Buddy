@@ -13,13 +13,16 @@
 {% if error %}<div class="notice notice--bad" role="alert">{{ error }}</div>{% endif %}
 {% if not ai %}<div class="notice notice--warn">The AI helper isn't available right now. You can still continue: we'll build a basic profile by scanning your CV for skills, and jobs will still be ranked.</div>{% endif %}
 
-<form method="post" action="/onboarding" data-loading="Analysing your CV and dream jobs…">
+<form method="post" action="/onboarding" enctype="multipart/form-data" data-loading="Analysing your CV and dream jobs…">
   <div class="step">
     <div class="step__n" aria-hidden="true">1</div>
     <section class="panel">
-      <h2 class="h2">Step 1 · Paste your CV</h2>
-      <textarea name="cv_text" rows="9" maxlength="20000" required placeholder="Paste the text of your CV here…" aria-label="Your CV" class="textarea" style="margin-top: 0.75rem">{{ form.cv_text|default('') }}</textarea>
-      <p class="privacy"><strong>Privacy:</strong> your CV text is sent to Google's Gemini API to be analysed. The CV itself is <strong>not stored</strong>; only the profile built from it is kept, for up to 7 days. You can delete it any time with "Delete my data".</p>
+      <h2 class="h2">Step 1 · Add your CV</h2>
+      <label class="field upload">Upload a PDF
+        <input type="file" name="cv_file" accept="application/pdf,.pdf" class="file"></label>
+      <label class="field" for="cv_text" style="margin-top: 1rem">Or paste the text</label>
+      <textarea id="cv_text" name="cv_text" rows="7" maxlength="20000" placeholder="Paste the text of your CV here…" class="textarea" style="margin-top: 0.375rem">{{ form.cv_text|default('') }}</textarea>
+      <p class="privacy"><strong>Privacy:</strong> a PDF is only read to extract its text and is never saved. Your CV text is sent to Google's Gemini API to be analysed. The CV itself is <strong>not stored</strong>; only the profile built from it is kept, for up to 7 days. You can delete it any time with "Delete my data".</p>
     </section>
   </div>
 

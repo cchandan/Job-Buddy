@@ -29,6 +29,33 @@ def onboard(c, **over):
     return c.post("/onboarding", data={**FORM, **over})
 
 
+def make_pdf(lines):
+    """A minimal one-page PDF holding the given lines of text."""
+    text = "BT /F1 11 Tf 40 780 Td 14 TL " + " ".join(
+        "(" + ln.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)") + ") Tj T*" for ln in lines) + " ET"
+    objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(text)} >>\nstream\n{text}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = "%PDF-1.4\n", []
+    for i, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{body}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n" + "".join(f"{o:010d} 00000 n \n" for o in offsets)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+    return out.encode("latin-1")
+
+
+def onboard_pdf(c, data, name="cv.pdf", **over):
+    form = {k: v for k, v in {**FORM, **over}.items() if k != "cv_text"}
+    return c.post("/onboarding", data=form, files={"cv_file": (name, data, "application/pdf")})
+
+
 # ---------- jobs / startup ----------
 
 def test_health_and_jobs_load_from_snapshot_without_gemma(client):
@@ -217,3 +244,39 @@ def test_skill_names_are_cleaned_to_one_spelling():
     assert {skills.canonical(x) for x in ["ReactJS", "react.js", "React", " REACT "]} == {"React"}
     assert skills.canonical("postgres") == "PostgreSQL" and skills.canonical("k8s") == "Kubernetes"
     assert skills.canonical_list(["python3", "Python", ""]) == ["Python"]
+
+
+# ---------- CV upload as PDF ----------
+
+def test_onboarding_accepts_a_pdf_cv(client):
+    r = onboard_pdf(client, make_pdf(CV.splitlines()))
+    assert r.status_code == 303 and r.headers["location"].startswith("/profile")
+    page = client.get("/profile").text
+    assert "Python" in page and "Docker" in page
+
+
+def test_pdf_wins_over_pasted_text(client):
+    r = client.post("/onboarding", data={**FORM, "cv_text": "x" * 60},
+                    files={"cv_file": ("cv.pdf", make_pdf(CV.splitlines()), "application/pdf")})
+    assert r.status_code == 303
+    assert "Flask" in client.get("/profile").text
+
+
+def test_a_file_that_is_not_a_pdf_is_refused_with_a_clear_message(client):
+    r = onboard_pdf(client, b"PK\x03\x04 this is a word document", name="cv.docx")
+    assert r.status_code == 200 and "isn&#39;t a PDF" in r.text
+
+
+def test_a_pdf_without_text_asks_for_pasted_text(client):
+    r = onboard_pdf(client, make_pdf([]))
+    assert r.status_code == 200 and "find any text" in r.text
+
+
+def test_a_damaged_pdf_is_refused_without_a_raw_error(client):
+    r = onboard_pdf(client, b"%PDF-1.4\nthis is not really a pdf")
+    assert r.status_code == 200 and ("read that PDF" in r.text or "find any text" in r.text)
+
+
+def test_no_cv_at_all_still_asks_for_one(client):
+    r = onboard(client, cv_text="")
+    assert r.status_code == 200 and "upload a PDF or paste your CV" in r.text

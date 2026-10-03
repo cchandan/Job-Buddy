@@ -329,6 +329,36 @@ a.row:hover { background: var(--ground); text-decoration: none; }
 }
 .select--inline { display: inline-block; width: auto; margin-left: 0.5rem; }
 
+.upload { margin-top: 0.875rem; }
+.file {
+  display: block;
+  width: 100%;
+  margin-top: 0.375rem;
+  padding: 0.625rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  font-weight: 400;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease), background-color 160ms var(--ease);
+}
+.file:hover { border-color: var(--cobalt); background: var(--cobalt-tint); }
+.file:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 2px; border-radius: var(--radius-sm); }
+.file::file-selector-button {
+  margin-right: 0.875rem;
+  padding: 0.4375rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 180ms var(--ease);
+}
+.file:hover::file-selector-button { background: var(--cobalt); }
+
 .tick { display: flex; align-items: center; gap: 0.625rem; font-weight: 600; font-size: 0.9375rem; }
 .tick input { width: 1.125rem; height: 1.125rem; accent-color: var(--cobalt); }
 

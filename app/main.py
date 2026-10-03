@@ -7,13 +7,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import db, gaps, gemma, profile, projects, ranking, sessions
+from . import cv_pdf, db, gaps, gemma, profile, projects, ranking, sessions
 
 log = logging.getLogger("careeros")
 HERE = Path(__file__).resolve().parent
@@ -49,7 +49,7 @@ def friendly(request, title, message, status=200, retry=True):
 @app.middleware("http")
 async def limit_body_size(request: Request, call_next):
     if int(request.headers.get("content-length") or 0) > MAX_BODY:
-        return friendly(request, "That's too much text", "Please keep your CV under about 2 MB (plain text).", 413,
+        return friendly(request, "That's too large", "Please keep your CV under about 2 MB.", 413,
                         retry=False)
     return await call_next(request)
 
@@ -120,10 +120,17 @@ def onboarding(request: Request, database=Depends(get_db), error: str = ""):
 
 @app.post("/onboarding")
 def onboarding_submit(request: Request, database=Depends(get_db), cv_text: str = Form(""),
+                      cv_file: UploadFile | None = File(None),
                       dj_title: list[str] = Form([]), dj_company: list[str] = Form([]),
                       dj_url: list[str] = Form([]), dj_description: list[str] = Form([]),
                       locations: str = Form(""), min_salary: str = Form(""), needs_sponsorship: str = Form(""),
                       industries: str = Form(""), technologies: str = Form("")):
+    pdf_problem = ""
+    if cv_file is not None and cv_file.filename:  # an uploaded PDF wins over pasted text; it is never saved
+        try:
+            cv_text = cv_pdf.extract_text(cv_file.file.read(MAX_BODY))
+        except ValueError as e:
+            pdf_problem = str(e)
     form = {"cv_text": cv_text, "locations": locations, "min_salary": min_salary, "industries": industries,
             "technologies": technologies, "needs_sponsorship": needs_sponsorship}
     visitor = sessions.get_visitor(database, request)
@@ -133,8 +140,10 @@ def onboarding_submit(request: Request, database=Depends(get_db), cv_text: str =
                     max_dream=profile.MAX_DREAM_JOBS, form=form,
                     dreams=list(zip(dj_title, dj_company, dj_url, dj_description)))
 
+    if pdf_problem:
+        return again(pdf_problem)
     if len(cv_text.strip()) < 40:
-        return again("Please paste your CV text (at least a few lines) so we can build your profile.")
+        return again("Please upload a PDF or paste your CV text (at least a few lines) so we can build your profile.")
     rows = [{"title": t, "company": c, "url": u, "description": d}
             for t, c, u, d in zip(dj_title, dj_company, dj_url, dj_description)]
     try:

@@ -2,7 +2,7 @@
 
 A career platform for early-career software graduates. **JobSpy fetches, Gemma 4 understands, plain code decides.**
 
-Paste a CV and up to 5 dream jobs. CareerOS builds a profile, ranks UK graduate jobs for you (with the sponsorship wording quoted from the advert), shows your skill gaps, and suggests portfolio projects. This Week, Calendar and Network are labelled previews.
+Upload a CV as a PDF (or paste it) and add up to 5 dream jobs. CareerOS builds a profile, ranks UK graduate jobs for you (with the sponsorship wording quoted from the advert), shows your skill gaps, and suggests portfolio projects. This Week, Calendar and Network are labelled previews.
 
 ## Run locally
     python -m venv .venv && source .venv/bin/activate

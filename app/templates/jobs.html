@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold tracking-tight">These are the jobs most worth your attention</h1>
+<p class="text-slate-600 mt-1">UK software graduate and early-career roles, collected ahead of time. Ranked for you; jobs that fail one of your must-haves sit at the bottom.</p>
+
+<form method="get" class="mt-5 flex flex-wrap gap-3 items-end text-sm">
+  <label>Sponsorship
+    <select name="sponsorship" class="block mt-1 rounded-lg border border-slate-300 p-2">
+      <option value="">All</option>
+      <option value="sponsors" {{ 'selected' if sponsorship == 'sponsors' }}>Sponsors visas</option>
+      <option value="unclear" {{ 'selected' if sponsorship == 'unclear' }}>Unclear</option>
+      <option value="no_sponsorship" {{ 'selected' if sponsorship == 'no_sponsorship' }}>No sponsorship</option>
+    </select></label>
+  <label>Location
+    <select name="location" class="block mt-1 rounded-lg border border-slate-300 p-2">
+      <option value="">Anywhere</option>
+      {% for l in locations %}<option {{ 'selected' if l == location }}>{{ l }}</option>{% endfor %}
+    </select></label>
+  <button class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-100">Apply</button>
+  {% if sponsorship or location %}<a href="/jobs" class="text-indigo-700 py-2">Clear filters</a>{% endif %}
+  <span class="ml-auto text-slate-500 py-2">Sorted by match score · {{ total }} jobs</span>
+</form>
+
+<div class="mt-5 space-y-4">
+  {% for r in ranked %}{{ m.job_card(r) }}
+  {% else %}
+  <div class="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-600">No jobs match those filters. <a href="/jobs" class="text-indigo-700 underline">Clear filters</a></div>
+  {% endfor %}
+</div>
+{% if not show_all and total > ranked|length %}
+<p class="mt-6 text-center"><a href="/jobs?show=all&sponsorship={{ sponsorship }}&location={{ location }}" class="text-indigo-700 underline">Show all {{ total }} jobs (including blocked ones)</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Calendar{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold tracking-tight">Calendar {{ m.preview() }}</h1>
+<p class="text-slate-600 mt-1">Sample events to show where this is heading. These are not real dates and can't be edited yet.</p>
+<h2 class="font-semibold mt-6">Upcoming</h2>
+<ul class="mt-3 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 text-sm">
+  {% for date, kind, colour, title, note in [
+    ("12 Nov", "Deadline", "red", "Graduate Software Engineer applications close", "Sample grad scheme · apply this week"),
+    ("19 Nov", "Hackathon", "violet", "Student hackathon: build something in 24 hours", "Sample event · good for your portfolio"),
+    ("26 Nov", "Networking", "emerald", "Tech meetup: Python & Cloud", "Sample event · a chance to meet engineers"),
+    ("03 Dec", "Assessment", "amber", "Online coding assessment", "Sample · practise data structures first"),
+    ("10 Dec", "Career fair", "sky", "Graduate careers fair", "Sample event"),
+  ] %}
+  <li class="p-4 flex gap-4 items-start">
+    <div class="w-16 shrink-0 font-semibold text-slate-700">{{ date }}</div>
+    <div class="flex-1"><div class="font-medium">{{ title }}</div><div class="text-slate-500">{{ note }}</div></div>
+    <span class="text-xs px-2 py-0.5 rounded bg-{{ colour }}-100 text-{{ colour }}-800">{{ kind }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

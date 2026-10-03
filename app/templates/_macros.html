@@ -1,53 +1,66 @@
-{% macro preview() %}<span class="ml-2 align-middle text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Preview</span>{% endmacro %}
+{% macro preview() %}<span class="preview">Preview</span>{% endmacro %}
 
-{% macro match_bar(score, muted=False) %}
-<div class="flex items-center gap-2" title="Match score">
-  <div class="w-24 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div class="h-full {{ 'bg-slate-400' if muted else ('bg-emerald-500' if score >= 70 else 'bg-indigo-500' if score >= 45 else 'bg-amber-500') }}" style="width: {{ score }}%"></div></div>
-  <span class="text-sm font-semibold {{ 'text-slate-500' if muted else 'text-slate-800' }}">{{ score }}%</span>
+{% macro arrow() %}<svg width="14" height="10" viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 5h12M9 1l4 4-4 4"/></svg>{% endmacro %}
+
+{% macro steps(done) %}
+<ol class="steps">
+  {% for label in ("1 · Your CV", "2 · Dream jobs", "3 · Preferences", "4 · Confirm profile") %}
+  <li {% if loop.index <= done %}class="is-on"{% endif %}>{{ label }}</li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+{% macro match_score(score, i=0) %}
+<div class="score" style="--s: {{ score }}; --i: {{ i }}" title="Match score">
+  <span class="score__n">{{ score }}</span><span class="score__pc">%</span>
 </div>
+<div class="meter" style="--s: {{ score }}" aria-hidden="true"><i></i></div>
 {% endmacro %}
 
 {% macro sponsorship_badge(job) %}
-  {% if job.sponsorship == 'sponsors' %}<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Sponsors visas</span>
-  {% elif job.sponsorship == 'no_sponsorship' %}<span class="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">No sponsorship</span>
-  {% else %}<span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">Sponsorship unclear</span>{% endif %}
+  {% if job.sponsorship == 'sponsors' %}<span class="tag tag--good">Sponsors visas</span>
+  {% elif job.sponsorship == 'no_sponsorship' %}<span class="tag tag--bad">No sponsorship</span>
+  {% else %}<span class="tag">Sponsorship unclear</span>{% endif %}
 {% endmacro %}
 
 {% macro money(n) %}£{{ "{:,}".format(n) }}{% endmacro %}
 
 {% macro salary(job) %}{% if job.salary_min %}{% if job.salary_max and job.salary_max != job.salary_min %}{{ money(job.salary_min) }} – {{ money(job.salary_max) }}{% else %}{{ money(job.salary_min) }}{% endif %}{% endif %}{% endmacro %}
 
-{% macro job_card(r, compact=False) %}
+{% macro job_card(r, compact=False, rank=0, note='') %}
 {% set job = r.job %}
-<article class="rounded-xl border {{ 'border-slate-200 bg-slate-100/70 opacity-80' if r.blocked else 'border-slate-200 bg-white' }} p-5">
-  <div class="flex flex-wrap items-start justify-between gap-3">
-    <div class="min-w-0">
-      <h3 class="font-semibold text-slate-900"><a href="{{ job.url }}" target="_blank" rel="noopener noreferrer" class="hover:text-indigo-700">{{ job.title }}</a></h3>
-      <p class="text-sm text-slate-600">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}{% if job.work_mode != 'unclear' %} · {{ job.work_mode|capitalize }}{% endif %}{% set s = salary(job) %}{% if s|trim %} · {{ s }}{% endif %}</p>
+{% set tone = 'blocked' if r.blocked else ('strong' if r.score >= 70 else 'fair' if r.score >= 45 else 'stretch') %}
+<article class="pass pass--{{ tone }}">
+  <div class="pass__head">
+    {% if rank and not r.blocked %}<span class="pass__rank">No. {{ rank }}</span>{% endif %}
+    {{ match_score(r.score, rank) }}
+  </div>
+  <div class="pass__body">
+    <h3 class="pass__title"><a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">{{ job.title }}</a></h3>
+    <p class="pass__meta">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}{% if job.work_mode != 'unclear' %} · {{ job.work_mode|capitalize }}{% endif %}{% set s = salary(job) %}{% if s|trim %} · {{ s }}{% endif %}</p>
+    <div class="tags">
+      {{ sponsorship_badge(job) }}
+      <span class="tag">{{ job.seniority|capitalize }}</span>
+      {% if job.industry %}<span class="tag">{{ job.industry }}</span>{% endif %}
     </div>
-    {{ match_bar(r.score, r.blocked) }}
+    {% if job.sponsorship_quote and job.sponsorship != 'unclear' %}
+    <blockquote class="quote {{ 'quote--bad' if job.sponsorship == 'no_sponsorship' else 'quote--good' }}">{{ job.sponsorship_quote }}”</blockquote>
+    {% endif %}
+    {% if r.blocked %}
+    <p class="pass__blocked">Blocked: {{ r.block_reason }}.</p>
+    {% endif %}
+    {% if not compact %}
+    <p class="pass__why">{{ r.why }}</p>
+    {% if r.strong_matches or r.missing_skills %}
+    <div class="pass__skills">
+      <div><div class="label">Strong matches</div>
+        <div class="chips">{% for s in r.strong_matches[:8] %}<span class="chip chip--have">{{ s }}</span>{% else %}<span class="none">None yet</span>{% endfor %}</div></div>
+      <div><div class="label">Missing skills</div>
+        <div class="chips">{% for s in r.missing_skills[:8] %}<span class="chip chip--miss">{{ s }}</span>{% else %}<span class="none">None</span>{% endfor %}</div></div>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% if note %}<p class="pass__note">{{ note }}</p>{% endif %}
   </div>
-  <div class="mt-3 flex flex-wrap items-center gap-2">
-    {{ sponsorship_badge(job) }}
-    <span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">{{ job.seniority|capitalize }}</span>
-    {% if job.industry %}<span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">{{ job.industry }}</span>{% endif %}
-  </div>
-  {% if job.sponsorship_quote and job.sponsorship != 'unclear' %}
-  <blockquote class="mt-3 border-l-2 {{ 'border-red-300' if job.sponsorship == 'no_sponsorship' else 'border-emerald-300' }} pl-3 text-sm italic text-slate-600">“{{ job.sponsorship_quote }}”</blockquote>
-  {% endif %}
-  {% if r.blocked %}
-  <p class="mt-3 text-sm text-red-700 font-medium">Blocked: {{ r.block_reason }}.</p>
-  {% endif %}
-  {% if not compact %}
-  <p class="mt-3 text-sm text-slate-700">{{ r.why }}</p>
-  {% if r.strong_matches or r.missing_skills %}
-  <div class="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
-    <div><div class="text-xs uppercase tracking-wide text-slate-400 mb-1">Strong matches</div>
-      {% for s in r.strong_matches[:8] %}<span class="chip !bg-emerald-50 !text-emerald-800 mr-1 mb-1">{{ s }}</span>{% else %}<span class="text-slate-400">None yet</span>{% endfor %}</div>
-    <div><div class="text-xs uppercase tracking-wide text-slate-400 mb-1">Missing skills</div>
-      {% for s in r.missing_skills[:8] %}<span class="chip !bg-amber-50 !text-amber-800 mr-1 mb-1">{{ s }}</span>{% else %}<span class="text-slate-400">None</span>{% endfor %}</div>
-  </div>
-  {% endif %}
-  {% endif %}
 </article>
 {% endmacro %}

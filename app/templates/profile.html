@@ -1,61 +1,59 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Your profile{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-semibold tracking-tight">Your career profile</h1>
-<p class="text-slate-600 mt-1">Here's what we picked up. Fix anything that's wrong, then continue.</p>
+<header class="page-head">
+  <h1>Your career profile</h1>
+  <p>Here's what we picked up. Fix anything that's wrong, then continue.</p>
+</header>
 
-<ol class="flex gap-2 mt-5 text-xs text-slate-500">
-  <li class="px-3 py-1 rounded-full bg-indigo-600 text-white">1 · Your CV</li>
-  <li class="px-3 py-1 rounded-full bg-indigo-600 text-white">2 · Dream jobs</li>
-  <li class="px-3 py-1 rounded-full bg-indigo-600 text-white">3 · Preferences</li>
-  <li class="px-3 py-1 rounded-full bg-indigo-600 text-white">4 · Confirm profile</li>
-</ol>
+{{ m.steps(4) }}
 
-{% if notice == 'basic' %}<div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm">The AI helper wasn't available, so this is a basic profile built by scanning your CV for known skills. Ranking and skill gaps work as normal; there's just no written summary.</div>{% endif %}
-{% if notice == 'limit' %}<div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm">The AI helper has reached its usage limit for now, so this is a basic profile. Ranking and skill gaps work as normal.</div>{% endif %}
-{% if saved %}<div class="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm">Saved.</div>{% endif %}
+{% if notice == 'basic' %}<div class="notice notice--warn">The AI helper wasn't available, so this is a basic profile built by scanning your CV for known skills. Ranking and skill gaps work as normal; there's just no written summary.</div>{% endif %}
+{% if notice == 'limit' %}<div class="notice notice--warn">The AI helper has reached its usage limit for now, so this is a basic profile. Ranking and skill gaps work as normal.</div>{% endif %}
+{% if saved %}<div class="notice notice--good" role="status">Saved.</div>{% endif %}
 
-{% if visitor.summary %}<p class="mt-6 text-slate-800 bg-white border border-slate-200 rounded-xl p-5">{{ visitor.summary }}</p>{% endif %}
+{% if visitor.summary %}<p class="summary">{{ visitor.summary }}</p>{% endif %}
 
-<div class="mt-6 grid md:grid-cols-2 gap-4">
-  <section class="bg-white border border-slate-200 rounded-xl p-5">
-    <h2 class="font-semibold">Target roles</h2>
-    <div class="mt-2">{% for r in visitor.target_roles %}<span class="chip mr-1 mb-1">{{ r }}</span>{% else %}<span class="text-sm text-slate-400">None yet</span>{% endfor %}</div>
-    <h2 class="font-semibold mt-5">Experience level</h2>
-    <p class="mt-1 text-sm">{{ visitor.level|capitalize }}</p>
-    {% if visitor.domains %}<h2 class="font-semibold mt-5">Domains</h2>
-    <div class="mt-2">{% for d in visitor.domains %}<span class="chip mr-1 mb-1">{{ d }}</span>{% endfor %}</div>{% endif %}
-    <h2 class="font-semibold mt-5">Skills your dream jobs share</h2>
-    <div class="mt-2">{% for s, n in shared %}<span class="chip mr-1 mb-1">{{ s }}{% if n > 1 %} · {{ n }} jobs{% endif %}</span>{% else %}<span class="text-sm text-slate-400">Add a job description to see this.</span>{% endfor %}</div>
+<div class="cols">
+  <section class="panel facts">
+    <h2 class="h2">Target roles</h2>
+    <div class="chips">{% for r in visitor.target_roles %}<span class="chip">{{ r }}</span>{% else %}<span class="none">None yet</span>{% endfor %}</div>
+    <h2 class="h2">Experience level</h2>
+    <p>{{ visitor.level|capitalize }}</p>
+    {% if visitor.domains %}<h2 class="h2">Domains</h2>
+    <div class="chips">{% for d in visitor.domains %}<span class="chip">{{ d }}</span>{% endfor %}</div>{% endif %}
+    <h2 class="h2">Skills your dream jobs share</h2>
+    <div class="chips">{% for s, n in shared %}<span class="chip">{{ s }}{% if n > 1 %} · {{ n }} jobs{% endif %}</span>{% else %}<span class="none">Add a job description to see this.</span>{% endfor %}</div>
   </section>
 
-  <section class="bg-white border border-slate-200 rounded-xl p-5">
-    <h2 class="font-semibold">Your skills ({{ visitor.skills|length }})</h2>
-    {% if visitor.skills|length < 5 %}<p class="mt-1 text-sm text-amber-700">We found only a few skills. Add the ones we missed below.</p>{% endif %}
-    <form method="post" action="/profile/edit" class="mt-2 space-y-3">
-      <textarea name="skills_text" rows="5" class="w-full rounded-lg border border-slate-300 p-2 text-sm">{{ visitor.skills|join(', ') }}</textarea>
-      <p class="text-xs text-slate-500">Comma-separated. Remove or add skills; spelling is tidied automatically.</p>
-      <label class="block text-sm">Level
-        <select name="level" class="ml-2 rounded-lg border border-slate-300 p-1 text-sm">{% for l in levels %}<option value="{{ l }}" {{ 'selected' if l == visitor.level }}>{{ l|capitalize }}</option>{% endfor %}</select></label>
-      <button class="px-4 py-2 rounded-lg border border-slate-300 text-sm hover:bg-slate-50">Save changes</button>
+  <section class="panel facts">
+    <h2 class="h2">Your skills ({{ visitor.skills|length }})</h2>
+    {% if visitor.skills|length < 5 %}<p style="color: var(--amber-ink)">We found only a few skills. Add the ones we missed below.</p>{% endif %}
+    <form method="post" action="/profile/edit" class="stack">
+      <textarea name="skills_text" rows="5" aria-label="Your skills" class="textarea">{{ visitor.skills|join(', ') }}</textarea>
+      <p class="muted" style="font-size: 0.8125rem">Comma-separated. Remove or add skills; spelling is tidied automatically.</p>
+      <label class="field">Level
+        <select name="level" class="select select--inline">{% for l in levels %}<option value="{{ l }}" {{ 'selected' if l == visitor.level }}>{{ l|capitalize }}</option>{% endfor %}</select></label>
+      <button class="btn btn--ghost">Save changes</button>
     </form>
   </section>
 </div>
 
-<section class="mt-4 bg-white border border-slate-200 rounded-xl p-5">
-  <h2 class="font-semibold">Dream jobs</h2>
-  <ul class="mt-2 space-y-2 text-sm">
+<section class="panel facts" style="margin-top: 1rem">
+  <h2 class="h2">Dream jobs</h2>
+  <ul class="dream-list">
     {% for j in visitor.dream_jobs %}<li><strong>{{ j.title }}</strong>{% if j.company %} · {{ j.company }}{% endif %}
-      <span class="text-slate-500">— {{ j.skills[:6]|join(', ') if j.skills else 'no skills found' }}</span></li>{% endfor %}
+      <span class="muted">— {{ j.skills[:6]|join(', ') if j.skills else 'no skills found' }}</span></li>{% endfor %}
   </ul>
-  <p class="text-xs text-slate-500 mt-3">Preferences: {% set p = visitor.preferences %}{% if p.needs_sponsorship %}<span class="chip !bg-indigo-600 !text-white">must-have: sponsorship</span> {% endif %}{% if p.min_salary %}<span class="chip !bg-indigo-600 !text-white">must-have: £{{ "{:,}".format(p.min_salary) }}+</span> {% endif %}{% for x in (p.locations or []) + (p.industries or []) + (p.technologies or []) %}<span class="chip">{{ x }}</span> {% endfor %}{% if not (p.needs_sponsorship or p.min_salary or p.locations or p.industries or p.technologies) %}none set{% endif %}</p>
+  <p class="prefs">Preferences: {% set p = visitor.preferences %}<span class="chips chips--inline">{% if p.needs_sponsorship %}<span class="tag tag--solid">must-have: sponsorship</span>{% endif %}{% if p.min_salary %}<span class="tag tag--solid">must-have: £{{ "{:,}".format(p.min_salary) }}+</span>{% endif %}{% for x in (p.locations or []) + (p.industries or []) + (p.technologies or []) %}<span class="chip">{{ x }}</span>{% endfor %}</span>{% if not (p.needs_sponsorship or p.min_salary or p.locations or p.industries or p.technologies) %}none set{% endif %}</p>
 </section>
 
-<div class="mt-6 flex flex-wrap gap-3 items-center">
+<div class="actions" style="margin-top: 1.75rem">
   <form method="post" action="/analyse" data-loading="Finding your skill gaps and project ideas…">
     <input type="hidden" name="next" value="/this-week">
-    <button class="px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">Looks right, continue</button>
+    <button class="btn btn--lg">Looks right, continue {{ m.arrow() }}</button>
   </form>
-  <a href="/onboarding" class="text-sm text-slate-600 underline">Start over with a different CV</a>
+  <a href="/onboarding" class="muted" style="text-decoration: underline">Start over with a different CV</a>
 </div>
 {% endblock %}

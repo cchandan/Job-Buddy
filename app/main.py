@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -30,6 +31,7 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
 
 def get_db():
@@ -105,7 +107,9 @@ def with_cookie(response, request, sid):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, database=Depends(get_db)):
     visitor = sessions.get_visitor(database, request)
-    return RedirectResponse("/this-week" if visitor and visitor.profile_source else "/onboarding", status_code=303)
+    if visitor and visitor.profile_source:
+        return RedirectResponse("/this-week", status_code=303)
+    return templates.TemplateResponse(request, "landing.html", {})
 
 
 @app.get("/onboarding", response_class=HTMLResponse)

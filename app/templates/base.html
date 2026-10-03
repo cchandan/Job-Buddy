@@ -3,60 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2536e8">
   <title>{% block title %}CareerOS{% endblock %} · CareerOS</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .chip { display:inline-block; padding:2px 10px; border-radius:9999px; font-size:12px; background:#eef2ff; color:#3730a3; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+  <link rel="stylesheet" href="/static/app.css?v=1">
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body>
 {% set nav = [("this-week","This Week","/this-week"),("jobs","Jobs","/jobs"),("skill-gaps","Skill Gaps","/skill-gaps"),("projects","Project Ideas","/projects"),("calendar","Calendar","/calendar"),("network","Network","/network")] %}
 
-<div class="md:flex min-h-screen">
-  <aside class="md:w-60 md:min-h-screen bg-white border-b md:border-b-0 md:border-r border-slate-200 md:fixed md:inset-y-0 flex md:flex-col">
-    <div class="px-5 py-4 md:py-6 font-semibold text-lg text-indigo-700 tracking-tight"><a href="/">CareerOS</a></div>
-    <nav class="flex md:flex-col flex-1 gap-1 px-2 md:px-3 overflow-x-auto">
-      {% for key, label, href in nav %}
-      <a href="{{ href }}" class="px-3 py-2 rounded-lg text-sm whitespace-nowrap {{ 'bg-indigo-50 text-indigo-700 font-medium' if active == key else 'text-slate-600 hover:bg-slate-100' }}">{{ label }}{% if key in ('calendar','network') %} <span class="text-[10px] uppercase text-slate-400">preview</span>{% endif %}</a>
-      {% endfor %}
-    </nav>
-    <div class="hidden md:block px-4 py-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
-      {% if visitor and visitor.profile_source %}
-      <a href="/profile" class="block hover:text-indigo-700">Your profile</a>
-      <form method="post" action="/delete" onsubmit="return confirm('Delete your profile, dream jobs and saved projects? This cannot be undone.');">
-        <button class="text-left hover:text-red-600">Delete my data</button>
-      </form>
-      {% endif %}
-      <div>JobSpy fetches · Gemma 4 understands · plain code decides</div>
-    </div>
-  </aside>
+<aside class="rail">
+  <a href="/" class="rail__mark">Career<span>OS</span></a>
+  <p class="rail__for">For graduate software developers</p>
+  <nav class="rail__nav" aria-label="Main">
+    {% for key, label, href in nav if visitor and visitor.profile_source %}
+    <a href="{{ href }}" class="rail__link" {% if active == key %}aria-current="page"{% endif %}>{{ label }}{% if key in ('calendar','network') %} <span class="rail__tag">preview</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  {% if visitor and visitor.profile_source %}
+  <div class="rail__foot">
+    <a href="/profile">Your profile</a>
+    <form method="post" action="/delete" onsubmit="return confirm('Delete your profile, dream jobs and saved projects? This cannot be undone.');">
+      <button>Delete my data</button>
+    </form>
+  </div>
+  {% endif %}
+</aside>
 
-  <main class="md:ml-60 flex-1 px-4 md:px-10 py-6 md:py-10 max-w-5xl w-full">
+<main class="main">
+  <div class="main__inner">
     {% block content %}{% endblock %}
     {% if visitor and visitor.profile_source %}
-    <form method="post" action="/delete" class="md:hidden mt-10" onsubmit="return confirm('Delete your data? This cannot be undone.');">
-      <button class="text-xs text-slate-500 underline">Delete my data</button>
+    <form method="post" action="/delete" class="foot-delete" onsubmit="return confirm('Delete your data? This cannot be undone.');">
+      <button class="link-btn">Delete my data</button>
     </form>
     {% endif %}
-  </main>
-</div>
-
-<div id="overlay" class="hidden fixed inset-0 z-50 bg-white/90 items-center justify-center">
-  <div class="text-center">
-    <div class="mx-auto mb-4 h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"></div>
-    <p id="overlay-text" class="text-slate-700 font-medium">Working…</p>
-    <p class="text-sm text-slate-500 mt-1">This can take up to a minute.</p>
   </div>
+</main>
+
+<div id="overlay" class="overlay" role="status" hidden>
+  <p id="overlay-text" class="overlay__text">Working…</p>
+  <div class="overlay__bar"></div>
+  <p class="overlay__sub">This can take up to a minute.</p>
 </div>
 <script>
   document.querySelectorAll("form[data-loading]").forEach(function (f) {
     f.addEventListener("submit", function () {
       document.getElementById("overlay-text").textContent = f.dataset.loading;
-      var o = document.getElementById("overlay"); o.classList.remove("hidden"); o.classList.add("flex");
+      document.getElementById("overlay").hidden = false;
     });
   });
-  window.addEventListener("pageshow", function () { document.getElementById("overlay").classList.add("hidden"); });
+  var here = document.querySelector('.rail__link[aria-current]');
+  if (here) here.scrollIntoView({ inline: "center", block: "nearest" });
+  window.addEventListener("pageshow", function () { document.getElementById("overlay").hidden = true; });
 </script>
 </body>
 </html>

@@ -1,37 +1,48 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Skill Gaps{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-semibold tracking-tight">What's stopping you from getting the jobs you want?</h1>
-<p class="text-slate-600 mt-1">Based on your dream jobs and the {{ total_relevant }} relevant live jobs (compatible with your must-haves, graduate or junior level).</p>
-{% if ai_note %}<div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm">{{ ai_note }}</div>{% endif %}
+<header class="page-head">
+  <h1>What's stopping you from getting the jobs you want?</h1>
+  <p>Based on your dream jobs and the {{ total_relevant }} relevant live software jobs (compatible with your must-haves, graduate or junior level).</p>
+</header>
+{% if ai_note %}<div class="notice notice--warn">{{ ai_note }}</div>{% endif %}
 
-<h2 class="font-semibold mt-8">Priority gaps</h2>
-{% if gaps %}
-<div class="mt-3 space-y-3">
-  {% for g in gaps %}
-  <article class="bg-white border border-slate-200 rounded-xl p-5">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="font-semibold text-lg">{{ g.skill }}</h3>
-      <span class="text-xs px-2 py-0.5 rounded {{ 'bg-red-100 text-red-800' if g.priority >= 60 else 'bg-amber-100 text-amber-800' if g.priority >= 30 else 'bg-slate-100 text-slate-600' }}">{{ 'High' if g.priority >= 60 else 'Medium' if g.priority >= 30 else 'Lower' }} priority · {{ g.priority }}</span>
-    </div>
-    <p class="text-sm text-slate-600 mt-1">Asked for in {{ g.jobs_asking }} of {{ g.total_relevant }} relevant jobs ({{ g.required_count }} as required){% if g.in_dream %} · appears in your dream jobs{% endif %} · Current evidence: none detected on your CV.</p>
-    {% if explanations.get(g.skill) %}<p class="text-sm mt-3 text-slate-800">{{ explanations[g.skill] }}</p>{% endif %}
-    {% if g.example_jobs %}<p class="text-xs text-slate-500 mt-3">Jobs asking for it: {% for j in g.example_jobs %}{{ j.title }} at {{ j.company }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
-    {% if related.get(g.skill) %}<p class="text-xs mt-2"><a href="/projects" class="text-indigo-700">Project that builds it: {{ related[g.skill]|join(', ') }} →</a></p>{% endif %}
-  </article>
-  {% endfor %}
-</div>
-{% if not has_analysis %}
-<form method="post" action="/analyse" data-loading="Writing explanations and project ideas…" class="mt-5"><input type="hidden" name="next" value="/skill-gaps">
-  <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm">Explain these gaps and suggest projects</button></form>
-{% endif %}
-{% else %}
-<p class="mt-3 bg-white border border-slate-200 rounded-xl p-6 text-slate-600">No gaps found: your CV already covers the skills these jobs ask for.</p>
-{% endif %}
+<section class="section">
+  <div class="section__head"><h2>Priority gaps</h2></div>
+  {% if gaps %}
+  <div class="gaps">
+    {% for g in gaps %}
+    {% set level = 'high' if g.priority >= 60 else 'medium' if g.priority >= 30 else 'lower' %}
+    <article class="gap gap--{{ level }}">
+      <div class="gap__head">
+        <span class="gap__level">{{ 'High' if g.priority >= 60 else 'Medium' if g.priority >= 30 else 'Lower' }} priority</span>
+        <div class="score" style="--s: {{ g.priority }}; --i: {{ loop.index }}"><span class="score__n">{{ g.priority }}</span></div>
+      </div>
+      <div class="gap__body">
+        <h3>{{ g.skill }}</h3>
+        <p class="gap__facts">Asked for in {{ g.jobs_asking }} of {{ g.total_relevant }} relevant jobs ({{ g.required_count }} as required){% if g.in_dream %} · appears in your dream jobs{% endif %} · Current evidence: none detected on your CV.</p>
+        {% if g.total_relevant %}<div class="meter" style="--s: {{ (100 * g.jobs_asking / g.total_relevant)|round|int }}; --i: {{ loop.index }}" aria-hidden="true"><i></i></div>{% endif %}
+        {% if explanations.get(g.skill) %}<p class="gap__why">{{ explanations[g.skill] }}</p>{% endif %}
+        {% if g.example_jobs %}<p class="gap__jobs">Jobs asking for it: {% for j in g.example_jobs %}{{ j.title }} at {{ j.company }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
+        {% if related.get(g.skill) %}<a href="/projects" class="more">Project that builds it: {{ related[g.skill]|join(', ') }} {{ m.arrow() }}</a>{% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% if not has_analysis %}
+  <form method="post" action="/analyse" data-loading="Writing explanations and project ideas…" style="margin-top: 1.25rem"><input type="hidden" name="next" value="/skill-gaps">
+    <button class="btn">Explain these gaps and suggest projects</button></form>
+  {% endif %}
+  {% else %}
+  <p class="panel muted">No gaps found: your CV already covers the skills these jobs ask for.</p>
+  {% endif %}
+</section>
 
-<h2 class="font-semibold mt-10">Strong</h2>
-<p class="text-sm text-slate-500">Skills you already have that relevant jobs ask for.</p>
-<div class="mt-3 bg-white border border-slate-200 rounded-xl p-5">
-  {% for s, n in strong %}<span class="chip !bg-emerald-50 !text-emerald-800 mr-1 mb-1">{{ s }} · {{ n }} jobs</span>{% else %}<span class="text-sm text-slate-500">None of your listed skills appear in the relevant jobs yet.</span>{% endfor %}
-</div>
+<section class="section">
+  <div class="section__head"><h2>Strong</h2><span class="section__note">Skills you already have that relevant jobs ask for.</span></div>
+  <div class="panel chips">
+    {% for s, n in strong %}<span class="chip chip--have">{{ s }} · {{ n }} jobs</span>{% else %}<span class="none">None of your listed skills appear in the relevant jobs yet.</span>{% endfor %}
+  </div>
+</section>
 {% endblock %}

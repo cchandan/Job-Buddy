@@ -37,6 +37,18 @@ SEARCHES = [
     "software developer apprentice",
     "junior frontend developer",
     "graduate java developer",
+    "associate software engineer",
+    "entry level software engineer",
+    "trainee software developer",
+    "junior backend developer",
+    "junior web developer",
+    "junior react developer",
+    "junior c# developer",
+    "junior .net developer",
+    "junior devops engineer",
+    "graduate cloud engineer",
+    "junior data engineer",
+    "junior software tester",
 ]
 
 

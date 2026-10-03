@@ -1,6 +1,6 @@
 """Database tables. Reads DATABASE_URL (SQLite if not set).
 
-Jobs come from data/jobs_tagged.json and are loaded at startup when the jobs table is empty.
+Jobs come from data/jobs_tagged.json; at startup, any job in the file that is not stored yet is added.
 """
 import json
 import os
@@ -99,8 +99,9 @@ def load_jobs_file(db):
     if not JOBS_FILE.exists():
         return 0
     added = 0
+    stored = {row[0] for row in db.query(Job.id)}
     for raw in json.loads(JOBS_FILE.read_text()):
-        if db.get(Job, raw["id"]):
+        if raw["id"] in stored:
             continue
         row = {f: raw.get(f) for f in JOB_FIELDS}
         row["required_skills"] = skills.canonical_list(raw.get("required_skills"))
@@ -122,6 +123,5 @@ def remove_old_visitors(db):
 def init_db():
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
-        if db.query(Job).count() == 0:
-            load_jobs_file(db)
+        load_jobs_file(db)  # adds only the jobs that are not stored yet
         remove_old_visitors(db)

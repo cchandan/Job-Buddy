@@ -89,6 +89,12 @@ def analysis_view(database, visitor):
     return prof, ranked, gaps.top_gaps(prof, ranked), gaps.strong_skills(prof, ranked)
 
 
+def suggestable(ranked):
+    """Jobs we put in front of the visitor. Senior roles stay in the pool (they shape project ideas) but are
+    never suggested to a graduate."""
+    return [r for r in ranked if r.job.get("seniority") != "senior"]
+
+
 def need_profile(request, database):
     """(visitor, redirect). Visitors without a profile are sent to onboarding."""
     visitor = sessions.get_visitor(database, request)
@@ -221,7 +227,8 @@ def analyse(request: Request, database=Depends(get_db), next: str = Form("/this-
         problem = "unavailable"
     else:
         try:
-            visitor.analysis = projects.generate(prof, gap_list, visitor.session_id)
+            senior = gaps.senior_skills(prof, ranked, exclude=[g["skill"] for g in gap_list[:projects.TOP_N]])
+            visitor.analysis = projects.generate(prof, gap_list, visitor.session_id, senior)
             database.commit()
         except gemma.GemmaLimitReached:
             problem = "limit"
@@ -261,7 +268,7 @@ def this_week(request: Request, database=Depends(get_db), ai: str = ""):
     if redirect:
         return redirect
     prof, ranked, gap_list, _ = analysis_view(database, visitor)
-    top_jobs = [r for r in ranked if not r.blocked][:3]
+    top_jobs = [r for r in suggestable(ranked) if not r.blocked][:3]
     project = (visitor.analysis or {}).get("projects", [None])[0] if visitor.analysis else None
     top_skills = {g["skill"] for g in gap_list[:5]}
     helped = len(top_skills & set(project["skills_demonstrated"])) if project else 0
@@ -276,6 +283,7 @@ def jobs_page(request: Request, database=Depends(get_db), sponsorship: str = "",
     if redirect:
         return redirect
     prof, ranked, _, _ = analysis_view(database, visitor)
+    ranked = suggestable(ranked)
     locations = sorted({(r.job["location"] or "").split(",")[0].strip() for r in ranked if r.job["location"]})
     shown = ranked
     if sponsorship in ("sponsors", "unclear", "no_sponsorship"):

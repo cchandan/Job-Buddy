@@ -4,6 +4,7 @@ from collections import Counter
 from .skills import SOFT_SKILLS
 
 RELEVANT_LEVELS = ("graduate", "junior")
+SENIOR_LEVELS = ("mid", "senior")
 
 
 def relevant_jobs(ranked):
@@ -49,6 +50,23 @@ def top_gaps(profile, ranked, limit=8):
         })
     gaps.sort(key=lambda g: (-g["priority"], -g["jobs_asking"], g["skill"]))
     return gaps[:limit]
+
+
+def senior_skills(profile, ranked, exclude=(), limit=6):
+    """What mid and senior roles ask for that the visitor lacks: [{skill, jobs_asking, total_senior}].
+
+    Junior adverts often leave out the tools the team actually uses; the senior adverts for the same kind of
+    work name them. These shape project ideas only: they never change the gap list or the ranking.
+    """
+    have = set(profile.get("skills") or []) | set(exclude)
+    senior = [r for r in ranked if r.job.get("seniority") in SENIOR_LEVELS]
+    asking = Counter()
+    for r in senior:
+        for s in set((r.job.get("required_skills") or []) + (r.job.get("optional_skills") or [])):
+            if s not in have and s not in SOFT_SKILLS:
+                asking[s] += 1
+    ranked_skills = sorted(asking.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"skill": s, "jobs_asking": n, "total_senior": len(senior)} for s, n in ranked_skills[:limit] if n >= 2]
 
 
 def strong_skills(profile, ranked, limit=10):

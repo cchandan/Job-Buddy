@@ -20,6 +20,7 @@
       {% if p.why_this_project %}<p><strong>Why this project:</strong> {{ p.why_this_project }}</p>{% endif %}
       <p class="project__gaps">Addresses {{ p.skills_demonstrated|length }} of your priority gaps</p>
       <div class="chips">{% for s in p.skills_demonstrated %}<span class="chip">{{ s }}</span>{% endfor %}</div>
+      {% if p.senior_skills %}<p><strong>Also uses what senior roles ask for:</strong> <span class="chips chips--inline">{% for s in p.senior_skills %}<span class="tag tag--warn">{{ s }}</span>{% endfor %}</span></p>{% endif %}
       {% if p.suggested_stack %}<p><strong>Suggested stack:</strong> {{ p.suggested_stack|join(', ') }}</p>{% endif %}
       {% if p.milestones %}<ol class="milestones">{% for ms in p.milestones %}<li><span>{{ ms }}</span></li>{% endfor %}</ol>{% endif %}
       <form method="post" action="/projects/status" class="project__status">

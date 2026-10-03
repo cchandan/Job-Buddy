@@ -280,3 +280,55 @@ def test_a_damaged_pdf_is_refused_without_a_raw_error(client):
 def test_no_cv_at_all_still_asks_for_one(client):
     r = onboard(client, cv_text="")
     assert r.status_code == 200 and "upload a PDF or paste your CV" in r.text
+
+
+# ---------- senior roles shape project ideas ----------
+
+def test_senior_skills_come_from_mid_and_senior_jobs_the_visitor_lacks():
+    from types import SimpleNamespace as R
+    from app import gaps
+
+    def job(level, *req):
+        return R(blocked=False, job={"seniority": level, "required_skills": list(req), "optional_skills": []})
+
+    ranked = [job("senior", "Kafka", "Python", "Terraform"), job("mid", "Kafka", "Terraform"),
+              job("senior", "Kafka", "Rust"), job("graduate", "Elixir", "Elixir"), job("junior", "Elixir")]
+    found = gaps.senior_skills({"skills": ["Python"]}, ranked, exclude=["Terraform"])
+    assert [(s["skill"], s["jobs_asking"], s["total_senior"]) for s in found] == [("Kafka", 3, 3)]
+    # Python is already on the CV, Terraform is already a gap, Rust is asked for once, Elixir is junior-only
+
+
+def test_projects_keep_only_senior_skills_from_the_list_we_gave():
+    out = projects.AnalysisOut(projects=[projects.ProjectOut(
+        title="Event pipeline", description="Stream events.", skills_demonstrated=["Docker"],
+        senior_skills=["Kafka", "Cobol", "Docker"], milestones=["a"])])
+    _, kept = projects.validate(out, ["Docker"], ["Kafka"])
+    assert kept[0]["senior_skills"] == ["Kafka"]
+
+
+def test_project_prompt_names_senior_skills_only_when_there_are_some(monkeypatch):
+    seen = []
+    monkeypatch.setattr(gemma, "ask_json", lambda prompt, schema, sid=None: seen.append(prompt) or projects.AnalysisOut(
+        projects=[projects.ProjectOut(title="T", description="D", skills_demonstrated=["Docker"])]))
+    gap = [{"skill": "Docker", "jobs_asking": 4, "total_relevant": 25, "in_dream": True}]
+    projects.generate({"skills": ["Python"]}, gap, None, [{"skill": "Kafka", "jobs_asking": 9, "total_senior": 30}])
+    projects.generate({"skills": ["Python"]}, gap, None)
+    assert "Kafka: asked for by 9 of 30 senior roles" in seen[0] and "senior_skills" in seen[0]
+    assert "senior" not in seen[1].lower()
+
+
+def test_senior_roles_are_never_suggested_as_jobs(client):
+    with db.SessionLocal() as s:
+        s.add(db.Job(id="senior-test-1", title="Zebra Senior Staff Engineer", company="Acme", location="London",
+                     description="x", url="https://example.com/s", seniority="senior", sponsorship="sponsors",
+                     work_mode="hybrid", industry="Tech", required_skills=["Python", "Docker", "Git"],
+                     optional_skills=[]))
+        s.commit()
+    try:
+        onboard(client)
+        assert "Zebra Senior Staff Engineer" not in client.get("/jobs?show=all").text
+        assert "Zebra Senior Staff Engineer" not in client.get("/this-week").text
+    finally:
+        with db.SessionLocal() as s:
+            s.delete(s.get(db.Job, "senior-test-1"))
+            s.commit()

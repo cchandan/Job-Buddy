@@ -209,19 +209,6 @@
 
 .band .gap, .band .project { text-align: left; }
 
-/* ---------- Credo ---------- */
-
-.credo { display: grid; gap: 0.25rem; }
-.credo li {
-  font-size: clamp(2.5rem, 0.8rem + 8.2vw, 6rem);
-  font-weight: 900;
-  font-stretch: 120%;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-}
-.credo li b { font-weight: inherit; color: var(--lime); }
-.credo__note { max-width: 36rem; margin-top: 2.25rem; font-size: 1.125rem; line-height: 1.55; color: rgb(255 255 255 / 0.9); }
-
 /* ---------- Privacy ---------- */
 
 .facts-row { display: grid; margin-top: 3rem; border-top: 1px solid var(--line-strong); }
@@ -258,9 +245,6 @@
     @keyframes rise { from { opacity: 0.25; transform: translateY(3rem); } }
 
     .rank__score, .band .gap .score, .band .gap .meter { animation: score-in linear both; animation-timeline: view(); animation-range: entry 10% cover 38%; }
-
-    .credo li { animation: thicken linear both; animation-timeline: view(); animation-range: entry 15% cover 48%; }
-    @keyframes thicken { from { font-weight: 160; font-stretch: 66%; opacity: 0.55; } }
   }
 }
 

@@ -649,3 +649,13 @@ def test_the_admin_can_filter_the_board_by_who_a_job_was_searched_for(people):
     assert "For wife only" in both and "For brother only" in both and "For Wife" in both
     only = dad.get(f"/board?who={people['wife']}").text
     assert "For wife only" in only and "For brother only" not in only
+
+
+def test_a_job_whose_page_is_still_open_is_not_left_to_drift_to_possibly_closed(people):
+    _old_job("openone", "https://c.example/open", days=40)
+    with db.SessionLocal() as s:
+        s.get(db.Job, "openone").last_seen = db.utcnow() - ingest.timedelta(days=40)
+        s.commit()
+        liveness.check(s, pause=(0, 0), fetch=lambda url: (200, url, "Apply now"))
+        from app import deadlines
+        assert deadlines.listing_status(s.get(db.Job, "openone"), date.today()) == "open"

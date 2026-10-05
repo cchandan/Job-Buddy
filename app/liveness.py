@@ -112,6 +112,7 @@ def check(database, run=None, limit=PER_RUN, pause=(2.0, 5.0), today=None, fetch
                               "Those jobs are left as they are.", level="warn", source=host)
         else:
             blocks[host] = 0
+            job.last_seen = db.utcnow()  # a page that is still open counts as seen, so it never drifts to "possibly closed"
         database.commit()
         time.sleep(random.uniform(*pause))
     return result

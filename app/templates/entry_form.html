@@ -7,7 +7,7 @@
 {% if error %}<div class="flash flash--bad" role="alert">{{ error }}</div>{% endif %}
 {% if note %}<div class="flash" role="status">{{ note }}</div>{% endif %}
 {% if not editing %}
-<form method="post" action="/tracker/new/read" enctype="multipart/form-data" class="card rowx" style="align-items: flex-end; gap: 12px">
+<form method="post" action="/tracker/new/read" enctype="multipart/form-data" class="card rowx" style="align-items: flex-end; gap: 12px" data-loading="Reading the job description…">
   {{ csrf_field() }}
   <div class="field" style="flex: 3 1 260px"><label class="lab" for="f-pdf">Have the job description as a PDF? Fill the boxes from it</label><input id="f-pdf" name="file" type="file" accept="application/pdf,.pdf" class="input" required></div>
   <button class="btn">Fill in from PDF</button>

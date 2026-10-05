@@ -1,6 +1,7 @@
 """The Tracker: a person's own jobs, with deadline, status and actions."""
 from datetime import date
 
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import auth, cv_pdf, db, summary, tracking, web
@@ -63,8 +64,9 @@ async def read_pdf(request: Request, person=Depends(users_only), file: UploadFil
         error = "That file is larger than 2 MB. Please choose a smaller PDF."
     else:
         try:
-            d, deadline = tracking.prefill(cv_pdf.extract_text(data))
-            note = "We filled in what we could find. Please check each box before adding the job."
+            d, deadline, used_ai = await run_in_threadpool(tracking.prefill, cv_pdf.extract_text(data))
+            note = ("We read the job description and filled in what we found. " if used_ai else "We filled in what we could find. ") \
+                + "Please check each box before adding the job."
         except ValueError as e:
             error = str(e)
     return web.page(request, "entry_form.html", person, "tracker", action="/tracker/new", heading="Add a job by hand",

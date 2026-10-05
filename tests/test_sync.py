@@ -635,3 +635,17 @@ def test_codex_runs_the_cheapest_model_and_any_cli_failure_switches_it_off(monke
     assert "--ephemeral" in cmd and "read-only" in cmd and 'model_reasoning_effort="low"' in cmd
     assert ai.tagging_backends() == []  # not retried on every batch
     ai.reset_backends()
+
+
+def test_the_admin_can_filter_the_board_by_who_a_job_was_searched_for(people):
+    make_job("a", title="For wife only")
+    make_job("b", title="For brother only")
+    with db.SessionLocal() as s:
+        s.get(db.Job, "a").matched = [people["wife"]]
+        s.get(db.Job, "b").matched = [people["brother"]]
+        s.commit()
+    dad = signed_in("dad")
+    both = dad.get("/board").text
+    assert "For wife only" in both and "For brother only" in both and "For Wife" in both
+    only = dad.get(f"/board?who={people['wife']}").text
+    assert "For wife only" in only and "For brother only" not in only

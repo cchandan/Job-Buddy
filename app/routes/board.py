@@ -12,7 +12,7 @@ PAGE_SIZE = 60
 @router.get("/board")
 def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.current_person), q: str = "",
           status: str = "open", location: str = "", work_mode: str = "", sponsorship: str = "", seniority: str = "",
-          sort: str = "", view: str = "", page: int = 1):
+          sort: str = "", view: str = "", who: int = 0, page: int = 1):
     today = web.today()
     since = person.last_board_visit
     mine = {} if person.is_admin else {
@@ -32,6 +32,8 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
             continue
         if forme and (person.id not in (job.matched or []) or (profile.needs_sponsorship and job.citizenship_required)):
             continue
+        if person.is_admin and who and who not in (job.matched or []):
+            continue  # the admin can look at one person's matches
         if needle and needle not in f"{job.title} {job.company}".lower():
             continue
         if place and place not in (job.location or "").lower():
@@ -69,11 +71,12 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     page = min(max(page, 1), pages)
     shown = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
     filters = {"q": q, "status": status, "location": location, "work_mode": work_mode, "sponsorship": sponsorship,
-               "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else ""}
+               "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else "", "who": who or ""}
     query = "&".join(f"{k}={v}" for k, v in filters.items() if v)
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all() if person.is_admin else []
+    names = {u.id: u.first_name for u in users}
     response = web.page(request, "board.html", person, "board", database=database, rows=shown, total=total, page=page,
-                        pages=pages, filters=filters, query=query, has_profile=has_profile, forme=forme, last_sync=ingest.last_sync(database),
+                        pages=pages, filters=filters, query=query, has_profile=has_profile, forme=forme, names=names, last_sync=ingest.last_sync(database),
                         board_age=ingest.board_age_days(database, today), users=users)
     person.last_board_visit = db.utcnow()
     database.commit()
@@ -94,6 +97,7 @@ def job_detail(job_id: str, request: Request, database=Depends(auth.get_db), per
     entry = None if person.is_admin else (database.query(db.TrackerEntry)
                                           .filter(db.TrackerEntry.person_id == person.id, db.TrackerEntry.job_id == job.id).first())
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all() if person.is_admin else []
+    names = {u.id: u.first_name for u in users}
     return web.page(request, "job.html", person, "board", database=database, job=job, entry=entry, users=users,
                     listing=deadlines.listing_status(job, today), chip=deadlines.chip(job.deadline, today))
 

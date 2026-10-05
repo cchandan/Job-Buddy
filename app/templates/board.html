@@ -24,6 +24,8 @@
   <div class="field" style="flex: 2 1 220px"><label class="lab" for="q">Search</label><input id="q" name="q" type="search" class="input" placeholder="Title or company" value="{{ filters.q }}"></div>
   <div class="field"><label class="lab" for="status">Listing status</label>
     <select id="status" name="status" class="input">{% for value, label in (("open", "Open"), ("closing_soon", "Closing soon"), ("possibly_closed", "Possibly closed"), ("closed", "Closed"), ("all", "All, including closed")) %}<option value="{{ value }}" {{ 'selected' if filters.status == value }}>{{ label }}</option>{% endfor %}</select></div>
+  {% if person.is_admin %}<div class="field"><label class="lab" for="who">Searched for</label>
+    <select id="who" name="who" class="input"><option value="">Everyone</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if filters.who == u.id }}>{{ u.first_name }}</option>{% endfor %}</select></div>{% endif %}
   <div class="field"><label class="lab" for="location">Location</label><input id="location" name="location" class="input" placeholder="Anywhere" value="{{ filters.location }}"></div>
   <div class="field"><label class="lab" for="work_mode">Work mode</label>
     <select id="work_mode" name="work_mode" class="input">{% for value, label in (("", "Any"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "Onsite")) %}<option value="{{ value }}" {{ 'selected' if filters.work_mode == value }}>{{ label }}</option>{% endfor %}</select></div>
@@ -43,7 +45,7 @@
     <div class="jmain">
       <h2 class="jt"><a href="/board/{{ job.id }}">{{ job.title }}</a></h2>
       <div class="meta">{{ meta(job, mode=False) }}</div>
-      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}{% if job.licensed_sponsor %}<span class="tag">Licensed sponsor</span>{% endif %}{% if job.citizenship_required %}<span class="tag">UK citizens only?</span>{% endif %}</div>
+      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}{% if person.is_admin %}{% for pid in job.matched or [] %}{% if names.get(pid) %}<span class="tag">For {{ names[pid] }}</span>{% endif %}{% endfor %}{% endif %}{% if job.licensed_sponsor %}<span class="tag">Licensed sponsor</span>{% endif %}{% if job.citizenship_required %}<span class="tag">UK citizens only?</span>{% endif %}</div>
       {% if job.sponsorship_quote and job.sponsorship != "unclear" %}<div class="quote">“{{ job.sponsorship_quote|truncate(180) }}”</div>{% endif %}
     </div>
     <div class="jside" style="align-items: flex-end; justify-content: space-between">

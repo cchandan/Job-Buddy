@@ -659,3 +659,9 @@ def test_a_job_whose_page_is_still_open_is_not_left_to_drift_to_possibly_closed(
         liveness.check(s, pause=(0, 0), fetch=lambda url: (200, url, "Apply now"))
         from app import deadlines
         assert deadlines.listing_status(s.get(db.Job, "openone"), date.today()) == "open"
+
+
+def test_the_admin_page_names_the_tagging_models(lab, monkeypatch):
+    monkeypatch.setattr(ai, "tagging_backends", lambda: ["claude", "codex"])
+    page = signed_in("dad").get("/admin/sync").text
+    assert "claude (haiku)" in page and "codex (gpt-6-luna)" in page

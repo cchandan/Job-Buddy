@@ -429,7 +429,7 @@ def _refresh(run, person_id, state, check_pages):
     except Exception as e:
         run.event("plan", f"Could not get the licensed-sponsor list ({_plain(e)}); carrying on without it.", level="warn")
     backends = ai.tagging_backends()
-    run.event("plan", "Tagging with: " + (", ".join(backends) if backends else "keywords only (no AI tool found)") + ".")
+    run.event("plan", "Tagging with: " + (", ".join(ai.backend_label(b) for b in backends) if backends else "keywords only (no AI tool found)") + ".")
     if not picked:
         run.event("plan", "No source is available. Install the fetching tools (see the README) and try again.", level="error")
         state.update(phase="Stopped", message="No job source is available.")

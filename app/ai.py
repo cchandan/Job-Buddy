@@ -92,6 +92,12 @@ def backend_ready(name):
     return shutil.which(name) is not None
 
 
+def backend_label(name):
+    """'claude (haiku)': which tool and which model, for the admin page and the run log."""
+    model = {"claude": CLAUDE_MODEL, "codex": CODEX_MODEL, "ollama": OLLAMA_MODEL, "gemini": MODEL}.get(name, "")
+    return f"{name} ({model})" if model else name
+
+
 def tagging_backends():
     return [b for b in TAGGING_BACKENDS if backend_ready(b)]
 

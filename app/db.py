@@ -24,7 +24,9 @@ if not os.getenv("JOBBUDDY_NO_DOTENV"):
 
 _url = os.getenv("DATABASE_URL") or f"sqlite:///{ROOT / 'jobbuddy.db'}"
 if _url.startswith("postgres://"):  # some hosts still hand out the old spelling
-    _url = _url.replace("postgres://", "postgresql://", 1)
+    _url = _url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif _url.startswith("postgresql://"):
+    _url = _url.replace("postgresql://", "postgresql+psycopg2://", 1)
 IS_SQLITE = _url.startswith("sqlite")
 
 engine = create_engine(

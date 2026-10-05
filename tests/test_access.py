@@ -15,7 +15,7 @@ def test_user_cannot_open_admin_pages(people):
                 f"/admin/users/{people['brother']}/profile", f"/admin/users/{people['brother']}/calendar",
                 f"/admin/users/{people['brother']}/cv/download"):
         assert wife.get(url).status_code == 403, url
-    for url in ("/admin/sync/publish", "/admin/sync/fetch", f"/admin/users/{people['brother']}/assign", "/admin/accounts"):
+    for url in ("/admin/sync/refresh", "/admin/sync/stop", f"/admin/users/{people['brother']}/assign", "/admin/accounts"):
         assert wife.post(url).status_code == 403, url
 
 

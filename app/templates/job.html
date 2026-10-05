@@ -29,7 +29,7 @@
   <div><span class="lab">Visa sponsorship</span>{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}{% if job.sponsorship_quote %} <span class="quote">“{{ job.sponsorship_quote }}”</span>{% endif %}</div>
   <div><span class="lab">Work mode</span>{{ MODE_LABELS.get(job.work_mode, "Not stated") }}{% if job.work_mode_quote %} <span class="quote">“{{ job.work_mode_quote }}”</span>{% endif %}</div>
   {% if job.required_skills %}<div><span class="lab">Skills asked for</span><div class="rowx">{% for s in job.required_skills %}<span class="tag">{{ s }}</span>{% endfor %}</div></div>{% endif %}
-  <div class="by">First seen {{ job.first_seen|dmy(True) }} · last found {{ job.last_seen|dmy(True) }}</div>
+  <div class="by">Added to the Job Board {{ job.first_seen|when }} · last found {{ job.last_seen|dmy(True) }}</div>
 </section>
 
 <section class="card stack" aria-label="Job description">

@@ -1,46 +1,54 @@
-"""A command-line backup to Admin > Jobs sync. Run on YOUR LAPTOP, never on the server.
+"""Refresh the Job Board from your laptop: fetch, tag only what is new, publish, check old jobs.
 
-    python scripts/ingest_jobs.py fetch                 # fetch and tag, using the saved search settings
-    python scripts/ingest_jobs.py sync --as chandan     # publish what was fetched to the Job Board
+    python scripts/ingest_jobs.py refresh [--as chandan]
 
-Fetched jobs wait in the database until they are synced, and tagging is saved job by job, so a rate-limit
-error or a closed laptop loses nothing: run `fetch` again to carry on.
+Normally you just double-click `Refresh Jobs.command`, which sets everything up and runs this. Progress is saved
+as it goes, so stopping or a rate limit loses nothing: run it again to carry on.
 """
 import argparse
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import db, ingest  # noqa: E402
+from app import db, ingest, runlog, sources  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["fetch", "sync"])
-    ap.add_argument("--as", dest="username", help="the admin username to record against the sync")
+    ap.add_argument("step", nargs="?", default="refresh", choices=["refresh"])
+    ap.add_argument("--as", dest="username", help="the admin username to record the refresh against (optional)")
+    ap.add_argument("--no-checks", action="store_true", help="skip the old-job page checks")
     args = ap.parse_args()
     db.init_db()
+    person_id = None
     with db.SessionLocal() as s:
-        if args.step == "fetch":
-            if not ingest.jobspy_available():
-                sys.exit("JobSpy is not installed. Run: pip install -r requirements-ingest.txt")
-            settings = ingest.get_settings(s)
-            keywords = ingest.split_list(settings.keywords)
-            if not keywords:
-                sys.exit("No keywords are set. Add some on Admin > Jobs sync first.")
-            state = dict(ingest.STATE, running=True, stop=False)
-            ingest.run(keywords, ingest.split_list(settings.locations), settings.per_search or 25, state)
-            print(f"{state['phase']}. {state['message']}")
-            summary = ingest.staged_summary(s)
-            print(f"Waiting to sync: {summary['new']} new, {summary['updated']} updated, {summary['unchanged']} unchanged, "
-                  f"{summary['failed']} failed, {summary['untagged']} untagged.")
-        else:
-            admin = s.query(db.Person).filter(db.Person.username == (args.username or "").lower(), db.Person.role == "admin").first()
-            if admin is None:
-                sys.exit("Give an admin's username with --as, so the sync is recorded against them.")
-            run = ingest.sync(s, admin)
-            print(f"Synced: {run.new} new, {run.updated} updated, {run.unchanged} unchanged, {run.failed} failed.")
+        if args.username:
+            admin = s.query(db.Person).filter(db.Person.username == args.username.lower(), db.Person.role == "admin").first()
+            person_id = admin.id if admin else None
+        if not sources.plan()[0]:
+            sys.exit("No job source is available. Run 'Refresh Jobs.command' once, or: pip install -r requirements-ingest.txt")
+        if not ingest._plan(ingest.profiles(s)):
+            sys.exit("No job titles or keywords are set. Open Admin > Jobs sync, add some to someone's search, and run this again.")
+    state = dict(ingest.STATE, running=True, stop=False)
+    import threading
+    worker = threading.Thread(target=ingest.refresh, args=(person_id, state, not args.no_checks))
+    worker.start()
+    last = ""
+    while worker.is_alive():
+        line = f"{state['phase']}… found {state['fetched']}" + (f", tagged {state['tagged']}/{state['total']}" if state["total"] else "")
+        if line != last:
+            print(line, flush=True)
+            last = line
+        time.sleep(2)
+    worker.join()
+    with db.SessionLocal() as s:
+        run, events = runlog.recent(s, 1)[0]
+        print()
+        for e in events:
+            print(f"[{e.stage}] {e.message}")
+        print(f"\nFinished: {run.status}. {state['message']}")
 
 
 if __name__ == "__main__":

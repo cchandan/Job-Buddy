@@ -1,10 +1,11 @@
 """Putting jobs into a Tracker and changing them. Used by the Tracker routes and by admin "assign".
 
-Four routes in: shortlisted from the Board, assigned by an admin, added by link, added by hand.
+Three routes in: shortlisted from the Board, assigned by an admin, added by hand.
 """
+import re
 from datetime import date
 
-from . import ai, db, deadlines, ingest, linkfetch, tagging
+from . import db, tagging
 
 MAX_ENTRIES = 300
 
@@ -40,30 +41,28 @@ def add_from_board(database, person, job, added_by):
     return entry, True
 
 
-def add_from_link(database, person, url, added_by, today=None):
-    """Read a job page and add it in the same format as a Board job. Raises linkfetch.LinkUnreadable.
+def prefill(text, today=None):
+    """Fill the add-by-hand boxes from a job description's text. Plain code, no AI: whatever is not found is left blank."""
+    lines = [l.strip(" \t•*-#") for l in text.splitlines() if l.strip()]
 
-    A link that is already on the Board just points at that job; nothing is duplicated.
-    """
-    today = today or date.today()
-    url = linkfetch.check_url(url)
-    job = database.get(db.Job, ingest.job_id(url))
-    if job is not None:
-        return add_from_board(database, person, job, added_by)
-    _check_room(database, person)
-    page = linkfetch.fetch_job(url)
-    try:
-        tags = tagging.tag_job(page, use_ai=ai.available(), count=True, today=today)
-    except (ai.AIUnavailable, ai.AILimitReached):
-        tags = tagging.tag_job(page, use_ai=False, today=today)
-    if not tags["deadline"]:  # many job pages state the closing date in their structured data
-        found = deadlines.parse_date(page["valid_through"], today)
-        tags["deadline"] = found.isoformat() if found else None
-    details = {**{k: page[k] for k in ("url", "title", "company", "location", "description")}, **tags}
-    entry = _new_entry(person, added_by, "link", details=details)
-    database.add(entry)
-    database.commit()
-    return entry, True
+    def labelled(*names):
+        for l in lines:
+            m = re.match(rf"(?:{'|'.join(names)})\s*[:\-–]\s*(.+)", l, re.I)
+            if m:
+                return m.group(1).strip()[:200]
+        return ""
+
+    first = next((l for l in lines if 3 <= len(l) <= 120 and not re.match(r"job (description|spec|profile)", l, re.I)), "")
+    about = re.search(r"\b(?:About|Join)\s+([A-Z][\w&.' -]{1,40}?)(?:[\n.,:!]|\s+(?:is|are|we|as)\b)", text)
+    url = re.search(r"https?://[^\s)>\]]+", text)
+    lo, hi = tagging.salary_range({"description": text})
+    deadline = tagging.keyword_deadline(text, today or date.today())[0]
+    d = {"title": labelled("job title", "position", "role", "vacancy") or first,
+         "company": labelled("company", "employer", "organisation", "organization") or (about.group(1).strip() if about else ""),
+         "location": labelled("location", "based in", "work location", "office"), "url": url.group(0).rstrip(".,") if url else "",
+         "salary_min": lo, "salary_max": hi, "work_mode": tagging.keyword_work_mode(text)[0],
+         "sponsorship": tagging.keyword_sponsorship(text)[0], "description": text[:20000]}
+    return d, deadline.isoformat() if deadline else ""
 
 
 def manual_details(form):

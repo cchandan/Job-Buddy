@@ -1,10 +1,9 @@
 """The Tracker: a person's own jobs, with deadline, status and actions."""
 from datetime import date
-from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from .. import auth, db, linkfetch, summary, tracking, web
+from .. import auth, cv_pdf, db, summary, tracking, web
 
 router = APIRouter()
 TABS = [("", "All"), ("shortlisted", "Shortlisted"), ("applied", "Applied"), ("interviewing", "Interviewing"),
@@ -47,25 +46,29 @@ def tracker(request: Request, database=Depends(auth.get_db), person=Depends(user
     return response
 
 
-@router.post("/tracker/add-link")
-def add_link(request: Request, database=Depends(auth.get_db), person=Depends(users_only), url: str = Form("")):
-    url = url.strip()[:2000]
-    try:
-        entry, created = tracking.add_from_link(database, person, url, person)
-    except linkfetch.LinkUnreadable:
-        web.flash(request, "We couldn't read that page. Add the details by hand instead.", "bad")
-        return web.redirect("/tracker/new?url=" + quote(url, safe=""))
-    except tracking.TrackerFull:
-        web.flash(request, "Your Tracker is full. Remove some old jobs first.", "bad")
-        return web.redirect("/tracker")
-    web.flash(request, "Added. Please check the details we read from the page." if created else "That job is already in your Tracker.")
-    return web.redirect(f"/tracker/{entry.id}")
-
-
 @router.get("/tracker/new")
-def new_form(request: Request, person=Depends(users_only), url: str = ""):
+def new_form(request: Request, person=Depends(users_only)):
     return web.page(request, "entry_form.html", person, "tracker", action="/tracker/new", heading="Add a job by hand",
-                    d={"url": url[:2000]}, deadline="", notes="", error="", editing=False)
+                    d={}, deadline="", notes="", error="", editing=False)
+
+
+@router.post("/tracker/new/read")
+async def read_pdf(request: Request, person=Depends(users_only), file: UploadFile = File(None)):
+    """Fill the add-by-hand form from a job description PDF. Nothing is saved until the person presses Add."""
+    d, deadline, note, error = {}, "", "", ""
+    data = await file.read(2 * 1024 * 1024 + 1) if file is not None and file.filename else b""
+    if not data:
+        error = "Please choose a PDF of the job description."
+    elif len(data) > 2 * 1024 * 1024:
+        error = "That file is larger than 2 MB. Please choose a smaller PDF."
+    else:
+        try:
+            d, deadline = tracking.prefill(cv_pdf.extract_text(data))
+            note = "We filled in what we could find. Please check each box before adding the job."
+        except ValueError as e:
+            error = str(e)
+    return web.page(request, "entry_form.html", person, "tracker", action="/tracker/new", heading="Add a job by hand",
+                    d=d, deadline=deadline, notes="", error=error, note=note, editing=False)
 
 
 @router.post("/tracker/new")

@@ -1,13 +1,8 @@
 """The Tracker: four ways in, statuses with history, deadlines, Apply, and the Calendar built from it."""
 from datetime import date
 
-from app import ai, db, linkfetch
+from app import ai, db
 from conftest import make_job, signed_in
-
-PAGE = {"url": "https://jobs.example.org/role/42", "title": "Platform Engineer", "company": "Widgets Ltd", "location": "Leeds",
-        "description": "We need someone who knows Python and AWS. Closing date: 25 October 2026. " + "More about the role. " * 12,
-        "valid_through": ""}
-
 
 def entries(person_id=None):
     with db.SessionLocal() as s:
@@ -73,46 +68,6 @@ def test_hand_set_deadline_overrides_the_adverts(people):
     assert "Closes in 4 days" in wife.get("/tracker").text
     wife.post(f"/tracker/{entry_id}/deadline", {"deadline": ""})  # cleared: back to the advert's
     assert "20 Oct" in wife.get("/tracker").text
-
-
-def test_add_by_link_uses_the_board_format(people, monkeypatch):
-    monkeypatch.setattr(linkfetch, "check_url", lambda url: url)
-    monkeypatch.setattr(linkfetch, "_get", lambda url: 1 / 0)  # must not be reached: fetch_job is replaced
-    monkeypatch.setattr(linkfetch, "fetch_job", lambda url: dict(PAGE))
-    wife = signed_in("wife")
-    r = wife.post("/tracker/add-link", {"url": PAGE["url"]})
-    assert r.status_code == 303
-    entry = entries()[0]
-    assert entry.source == "link" and entry.job_id is None
-    assert entry.details["title"] == "Platform Engineer" and entry.details["deadline"] == "2026-10-25"
-    assert "Python" in entry.details["required_skills"]
-    page = wife.get("/tracker").text
-    assert "Platform Engineer" in page and "from a link" in page
-    assert "Platform Engineer" not in wife.get("/board?status=all").text  # private: not on the shared Board
-
-
-def test_link_already_on_the_board_makes_no_duplicate(people, monkeypatch):
-    from app import ingest
-    monkeypatch.setattr(linkfetch, "check_url", lambda url: url)
-    make_job(ingest.job_id(PAGE["url"]), url=PAGE["url"], title="Already here")
-    wife = signed_in("wife")
-    wife.post("/tracker/add-link", {"url": PAGE["url"]})
-    wife.post("/tracker/add-link", {"url": PAGE["url"]})
-    rows = entries()
-    assert len(rows) == 1 and rows[0].job_id == ingest.job_id(PAGE["url"]) and rows[0].details is None
-
-
-def test_unreadable_link_falls_back_to_the_manual_form(people, monkeypatch):
-    def unreadable(url):
-        raise linkfetch.LinkUnreadable("blocked")
-    monkeypatch.setattr(linkfetch, "check_url", lambda url: url)
-    monkeypatch.setattr(linkfetch, "fetch_job", unreadable)
-    wife = signed_in("wife")
-    r = wife.post("/tracker/add-link", {"url": "https://jobs.example.org/x"})
-    assert r.status_code == 303 and r.headers["location"].startswith("/tracker/new?url=https%3A%2F%2Fjobs.example.org")
-    assert entries() == []  # nothing half-saved
-    form = wife.get(r.headers["location"]).text
-    assert "couldn&#39;t read that page" in form and 'value="https://jobs.example.org/x"' in form
 
 
 def test_calendar_follows_the_tracker(people):
@@ -192,3 +147,44 @@ def test_board_filters_and_hides_closed(people):
     assert "Open role" not in wife.get("/board?work_mode=onsite").text
     assert "Open role" in wife.get("/board?q=open").text
     assert wife.get("/board/open1").status_code == 200 and wife.get("/board/nope").status_code == 404
+
+
+def _pdf(lines):
+    """A tiny real PDF with these lines of text."""
+    body = "BT /F1 11 Tf 14 TL 40 760 Td " + " ".join(f"({l.replace('(', '[').replace(')', ']')}) Tj T*" for l in lines) + " ET"
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+            f"<< /Length {len(body)} >>\nstream\n{body}\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, offsets = "%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n" + "".join(f"{o:010d} 00000 n \n" for o in offsets)
+    out += f"trailer\n<< /Root 1 0 R /Size {len(objs) + 1} >>\nstartxref\n{xref}\n%%EOF"
+    return out.encode("latin-1")
+
+
+ADVERT = ["Junior Business Analyst", "Company: Widgets Ltd", "Location: Birmingham", "Salary: £30,000 - £36,000 a year",
+          "This is a hybrid role. We do not offer visa sponsorship.", "Closing date: 25 October 2026",
+          "Apply at https://widgets.example/jobs/42", "You will work with stakeholders to gather requirements."]
+
+
+def test_a_job_description_pdf_fills_the_add_by_hand_boxes(people):
+    wife = signed_in("wife")
+    token = wife.token()
+    r = wife.client.post("/tracker/new/read", data={"csrf": token}, files={"file": ("jd.pdf", _pdf(ADVERT), "application/pdf")})
+    page = r.text
+    assert r.status_code == 200 and "We filled in what we could find" in page
+    for expected in ('value="Junior Business Analyst"', 'value="Widgets Ltd"', 'value="Birmingham"', 'value="30000"', 'value="36000"',
+                     'value="2026-10-25"', 'value="https://widgets.example/jobs/42"'):
+        assert expected in page, expected
+    assert '<option value="hybrid" selected>' in page and '<option value="no_sponsorship" selected>' in page
+    assert entries() == []  # nothing is saved until she presses Add
+
+
+def test_a_bad_or_missing_pdf_is_explained(people):
+    wife = signed_in("wife")
+    token = wife.token()
+    assert "isn&#39;t a PDF" in wife.client.post("/tracker/new/read", data={"csrf": token}, files={"file": ("x.pdf", b"hello", "application/pdf")}).text
+    assert "Please choose a PDF" in wife.client.post("/tracker/new/read", data={"csrf": token}).text

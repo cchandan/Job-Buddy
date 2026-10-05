@@ -1,97 +1,151 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip, csrf_field with context %}
+{% from "_macros.html" import csrf_field with context %}
 {% block title %}Jobs sync{% endblock %}
 {% block content %}
 <div class="head">
   <div>
     <h1 class="t">Jobs sync</h1>
-    <p class="sub">Fetch today's jobs on your laptop, check them, then publish to everyone's Job Board.</p>
+    <p class="sub">One button: find new jobs, tag only what is new, publish, and check a few old ones are still open.</p>
   </div>
-  {% if can_fetch %}<span class="badge b-ok">Running on your laptop · fetching available</span>
-  {% else %}<span class="badge b-none">Live site · fetching not available here</span>{% endif %}
+  {% if can_fetch %}<span class="badge b-ok">Running on your laptop · {{ picked|length }} sources ready</span>
+  {% else %}<span class="badge b-none">Live site · refreshing not available here</span>{% endif %}
 </div>
 
-<section class="card stack" aria-label="Step 1: search settings">
-  <form method="post" action="/admin/sync/settings" class="stack">
-    {{ csrf_field() }}
-    <div class="head"><h2 class="t2">1 · What to look for</h2><button class="btn">Save settings</button></div>
-    <div class="rowx" style="align-items: flex-end; gap: 12px">
-      <div class="field" style="flex: 2 1 260px"><label class="lab" for="keywords">Job titles or keywords, separated by commas</label><textarea id="keywords" name="keywords" class="input" maxlength="2000" placeholder="junior software developer, data analyst">{{ settings.keywords or "" }}</textarea></div>
-      <div class="field" style="flex: 2 1 220px"><label class="lab" for="locations">Locations, separated by commas</label><textarea id="locations" name="locations" class="input" maxlength="1000" placeholder="United Kingdom">{{ settings.locations or "" }}</textarea></div>
-      <div class="field" style="flex: 0 1 150px"><label class="lab" for="per_search">Results per search</label><input id="per_search" name="per_search" type="number" min="5" max="100" class="input" value="{{ settings.per_search or 25 }}"></div>
-    </div>
-    <p class="by">Every keyword is searched in every location, so 4 keywords and 2 locations make 8 searches.</p>
-  </form>
-</section>
-
-<section class="card stack" aria-label="Step 2: fetch and tag">
-  <div class="head">
-    <h2 class="t2">2 · Fetch and tag</h2>
-    {% if can_fetch %}
-    <div class="rowx">
-      {% if state.running %}<form method="post" action="/admin/sync/stop">{{ csrf_field() }}<button class="btn">Stop</button></form>
-      {% else %}<form method="post" action="/admin/sync/fetch">{{ csrf_field() }}<button class="btn btn--primary">{{ "Fetch more and finish tagging" if staged.total else "Fetch and tag" }}</button></form>{% endif %}
-    </div>
-    {% endif %}
-  </div>
+<section class="card stack" aria-label="Refresh jobs">
   {% if not can_fetch %}
-  <div class="notice" style="display: block"><strong>Fetching only works when Job Buddy is running on your laptop.</strong><br>Job sites block cloud servers. On your laptop, run <code>pip install -r requirements-ingest.txt</code> and <code>uvicorn app.main:app</code> with <code>DATABASE_URL</code> pointing at the live database, sign in there, and come back to this page. Anything already fetched can still be synced from here.</div>
+  <div class="notice" style="display: block"><strong>Refreshing only works when Job Buddy is running on your laptop.</strong><br>Job sites block cloud servers. On your laptop, double-click <code>Refresh Jobs.command</code> in the Job Buddy folder (it sets everything up the first time), then come back to this page.</div>
   {% elif state.running %}
-  <div class="tight" role="status">
-    <div class="rowx" style="justify-content: space-between"><span><strong>{{ state.phase }}…</strong> Fetched {{ state.fetched }}{% if state.total %} · Tagged {{ state.tagged }} of {{ state.total }}{% endif %}</span><span class="by">You can stop and carry on later; nothing is lost. This page refreshes by itself.</span></div>
-    <div class="bar" role="progressbar" aria-label="Tagging progress" aria-valuemin="0" aria-valuemax="{{ state.total or 1 }}" aria-valuenow="{{ state.tagged }}"><span style="width: {{ (100 * state.tagged // state.total) if state.total else 4 }}%"></span></div>
-    {% if state.message %}<p class="by">{{ state.message }}</p>{% endif %}
+  <div id="live" class="stack" role="status" aria-live="polite">
+    <div class="rowx" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap">
+      <h2 class="t2">Refreshing jobs…</h2><span class="by" id="lv-eta">Estimating…</span>
+    </div>
+    <div class="rowx" id="lv-phases" style="gap: 8px; flex-wrap: wrap"></div>
+    <div class="bar" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="lv-bar" style="width: 4%; transition: width .6s ease"></span></div>
+    <div class="rowx" style="justify-content: space-between; flex-wrap: wrap"><span id="lv-now"><strong>Starting…</strong></span><span class="by" id="lv-counts"></span></div>
+    <div id="lv-sources" class="stack"></div>
+    <div id="lv-notes" class="stack"></div>
+    <div class="rowx" style="justify-content: space-between; flex-wrap: wrap; gap: 12px">
+      <span class="by">Stopping is safe: everything found so far is already saved, and the next refresh carries on.</span>
+      <form method="post" action="/admin/sync/stop">{{ csrf_field() }}<button class="btn">Stop</button></form>
+    </div>
+    <noscript><p class="by">Reload this page to see progress.</p></noscript>
   </div>
   {% else %}
-  <p class="sub">{% if state.phase %}{{ state.phase }}. {% endif %}{{ state.message or ("Press the button to fetch the latest jobs for your search settings." if not staged.total else "") }}
-    {% if staged.untagged %}{{ staged.untagged }} fetched job{{ '' if staged.untagged == 1 else 's' }} still need tagging: press the button to carry on.{% endif %}</p>
+  <div class="head">
+    <div><h2 class="t2">Refresh jobs</h2>
+      <p class="sub">{% if state.phase %}{{ state.phase }}. {{ state.message }}{% else %}Searches every source, adds only what is new, and updates the Job Board for everyone.{% endif %}</p></div>
+    <form method="post" action="/admin/sync/refresh">{{ csrf_field() }}<button class="btn btn--primary">Refresh jobs</button></form>
+  </div>
   {% endif %}
+  {% for note in notes %}<div class="notice"><span>{{ note }}</span></div>{% endfor %}
+  <p class="by">Tagging with: {{ backends|join(", ") if backends else "keywords only (no AI tool found)" }}. Refreshing never changes anyone's Tracker, statuses, deadlines they set, or CVs.</p>
 </section>
 
-<section class="card stack" aria-label="Step 3: review and sync">
-  <div class="head">
-    <h2 class="t2">3 · Review and sync</h2>
-    {% if staged.total and not state.running %}
-    <div class="rowx">
-      <form method="post" action="/admin/sync/discard" data-confirm="Discard everything fetched and not yet synced? The Job Board is not changed.">{{ csrf_field() }}<button class="btn">Discard</button></form>
-      <form method="post" action="/admin/sync/publish" data-confirm="Publish these jobs to everyone's Job Board?">{{ csrf_field() }}<button class="btn btn--primary">Sync to Job Board</button></form>
-    </div>
+<section class="card stack" aria-label="What happened">
+  <h2 class="t2">What happened</h2>
+  {% if runs %}
+  {% for run, events in runs %}
+  <details {% if loop.first %}open{% endif %}>
+    <summary><strong>{{ run.started|when }}</strong> ·
+      {% if run.status == "complete" %}<span class="badge b-ok">Complete</span>{% elif run.status == "running" %}<span class="badge b-none">Running</span>{% elif run.status == "partial" %}<span class="badge">Partial</span>{% else %}<span class="badge b-bad">Failed</span>{% endif %}
+      {% set sm = run.summary or {} %}{% if sm.new is defined %} {{ sm.new }} new · {{ sm.updated }} updated · {{ sm.seen }} unchanged · {{ sm.closed }} closed{% endif %}</summary>
+    {% if sm.sources %}
+    <div class="scroll"><table class="tb">
+      <thead><tr><th>Source</th><th>Searches</th><th>Jobs returned</th><th>Result</th></tr></thead>
+      <tbody>{% for name, info in sm.sources.items() %}<tr><td>{{ name }}</td><td>{{ info.searches }}{% if info.failed_searches %} ({{ info.failed_searches }} failed){% endif %}</td><td>{{ info.returned }}</td>
+        <td>{% if info.failed %}Failed{% elif info.failed_searches %}Partly failed{% else %}OK{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
     {% endif %}
-  </div>
-  {% if staged.total %}
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px">
-    <div class="doc"><div class="num">{{ staged.new }}</div><div class="meta">New</div></div>
-    <div class="doc"><div class="num">{{ staged.updated }}</div><div class="meta">Updated</div></div>
-    <div class="doc"><div class="num">{{ staged.unchanged }}</div><div class="meta">Unchanged</div></div>
-    <div class="doc"><div class="num">{{ staged.failed }}</div><div class="meta">Failed to tag</div></div>
-  </div>
-  {% if staged.sample %}
-  <div class="scroll"><table class="tb">
-    <thead><tr><th>New job</th><th>Company</th><th>Deadline</th><th>Tags</th></tr></thead>
-    <tbody>
-      {% for row in staged.sample %}
-      <tr><td>{{ row.title }}</td><td>{{ row.company }}</td><td>{{ chip(chip_for(row.deadline, today_)) }}</td>
-        <td><span class="tag">{{ MODE_LABELS.get(row.work_mode, "Mode unclear") }}</span> <span class="tag">{{ SPONSOR_LABELS[row.sponsorship] }}</span></td></tr>
-      {% endfor %}
-    </tbody>
-  </table></div>
-  {% endif %}
-  {% else %}
-  <p class="sub">Nothing is waiting to be synced.</p>
-  {% endif %}
-  <p class="by">Sync only adds and updates jobs. It never changes anyone's Tracker, statuses, deadlines they set, or CVs.</p>
+    {% if sm.ai_calls is defined %}<p class="by">AI: {{ sm.ai_calls }} call{{ '' if sm.ai_calls == 1 else 's' }}, avoided for {{ sm.ai_avoided }} job{{ '' if sm.ai_avoided == 1 else 's' }}{% if sm.backends %} via {{ sm.backends|join(", ") }}{% endif %}{% if sm.keyword_only %} · {{ sm.keyword_only }} tagged by keywords only{% endif %}.</p>{% endif %}
+    <ul class="tight" style="list-style: none; padding: 0">
+      {% for e in events %}<li class="by" style="{% if e.level == 'error' %}color: #b4230f{% elif e.level == 'warn' %}color: #8a5a00{% endif %}"><span class="tag">{{ e.stage }}</span> {{ e.message }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endfor %}
+  {% else %}<p class="sub">Nothing has run yet. Press Refresh jobs.</p>{% endif %}
+</section>
+
+<section class="card stack" aria-label="Who we are searching for">
+  <h2 class="t2">Who we are searching for</h2>
+  <p class="by">Each person has their own search. Jobs it finds go into their "For you" view on the Job Board; everyone can still see everything.{% if skipped %} Not used: {% for name, why in skipped %}{{ name }} ({{ why }}){{ ", " if not loop.last }}{% endfor %}.{% endif %}</p>
+  {% for p in profiles %}
+  <details>
+    <summary><strong>{{ p.person.name }}</strong> {% if not p.enabled %}<span class="badge b-none">Off</span>{% endif %}<span class="by"> · {{ p.keywords.split(",")|length if p.keywords else 0 }} searches · {{ p.locations or "no location" }}{% if p.uk_wide %} + UK-wide{% endif %}{% if p.remote_uk %} + remote{% endif %}</span></summary>
+    <form method="post" action="/admin/sync/profile/{{ p.person_id }}" class="stack">
+      {{ csrf_field() }}
+      <div class="field"><label class="lab" for="kw{{ p.person_id }}">Job titles or keywords, separated by commas</label><textarea id="kw{{ p.person_id }}" name="keywords" class="input" rows="4" maxlength="3000">{{ p.keywords or "" }}</textarea></div>
+      <div class="rowx" style="align-items: flex-end; gap: 12px">
+        <div class="field" style="flex: 2 1 200px"><label class="lab" for="loc{{ p.person_id }}">Locations</label><input id="loc{{ p.person_id }}" name="locations" class="input" maxlength="1000" value="{{ p.locations or '' }}"></div>
+        <div class="field" style="flex: 0 1 110px"><label class="lab" for="dist{{ p.person_id }}">Miles around</label><input id="dist{{ p.person_id }}" name="distance" type="number" min="1" max="200" class="input" value="{{ p.distance or 25 }}"></div>
+        <div class="field" style="flex: 0 1 130px"><label class="lab" for="per{{ p.person_id }}">Results per search</label><input id="per{{ p.person_id }}" name="per_search" type="number" min="5" max="1000" class="input" value="{{ p.per_search or 100 }}"></div>
+      </div>
+      <div class="field"><label class="lab" for="av{{ p.person_id }}">Rule a job out if its title has any of these words</label><input id="av{{ p.person_id }}" name="avoid" class="input" maxlength="1000" value="{{ p.avoid or '' }}"></div>
+      <div class="rowx" style="gap: 18px; flex-wrap: wrap">
+        <label><input type="checkbox" name="remote_uk" value="1" {{ 'checked' if p.remote_uk }}> Also UK-wide remote jobs</label>
+        <label><input type="checkbox" name="uk_wide" value="1" {{ 'checked' if p.uk_wide }}> Search the big UK cities too</label>
+        <label><input type="checkbox" name="needs_sponsorship" value="1" {{ 'checked' if p.needs_sponsorship }}> Needs visa sponsorship</label>
+        <label><input type="checkbox" name="enabled" value="1" {{ 'checked' if p.enabled }}> Include in refresh</label>
+      </div>
+      <button class="btn">Save {{ p.person.first_name }}'s search</button>
+    </form>
+  </details>
+  {% else %}<p class="sub">Create a user account on Admin home first.</p>{% endfor %}
 </section>
 
 <section class="card stack" aria-label="Sync history">
   <h2 class="t2">History</h2>
   {% if history %}
   <div class="scroll"><table class="tb">
-    <thead><tr><th>When</th><th>Who</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Failed</th></tr></thead>
-    <tbody>{% for run in history %}<tr><td>{{ run.at|when }}</td><td>{{ run.person.first_name if run.person else "Someone who has left" }}</td><td>{{ run.new }}</td><td>{{ run.updated }}</td><td>{{ run.unchanged }}</td><td>{{ run.failed }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>When</th><th>Who</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Closed</th></tr></thead>
+    <tbody>{% for run in history %}<tr><td>{{ run.at|when }}</td><td>{{ run.person.first_name if run.person else "The laptop" }}</td><td>{{ run.new }}</td><td>{{ run.updated }}</td><td>{{ run.unchanged }}</td><td>{{ run.closed or 0 }}</td></tr>{% endfor %}</tbody>
   </table></div>
-  {% else %}<p class="sub">No syncs yet.</p>{% endif %}
+  {% else %}<p class="sub">No refreshes yet.</p>{% endif %}
 </section>
 {% endblock %}
 {% block scripts %}
-{% if state.running %}<script>setTimeout(function () { location.reload(); }, 4000);</script>{% endif %}
+{% if state.running %}
+<script>
+(function () {
+  var NAMES = {indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", reed: "Reed", adzuna: "Adzuna"};
+  var PHASES = [["Planning", "Planning"], ["Fetching", "Searching"], ["Checking old jobs", "Checking old jobs"], ["Publishing", "Publishing"]];
+  var STATUS = {waiting: "Waiting", running: "Searching now", done: "Done", failed: "Skipped (kept failing)"};
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, text, cls, style) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; if (style) e.style.cssText = style; return e; }
+  function eta(s) {
+    if (s.eta_seconds == null) return "Estimating…";
+    var m = Math.round(s.eta_seconds / 60);
+    return m < 1 ? "Under a minute left" : "About " + m + " min left (searches only)";
+  }
+  function render(s) {
+    $("lv-eta").textContent = s.stopping ? "Stopping after this step…" : eta(s);
+    $("lv-bar").style.width = Math.max(4, s.percent) + "%";
+    $("lv-bar").parentNode.setAttribute("aria-valuenow", s.percent);
+    var ph = $("lv-phases"); ph.textContent = "";
+    PHASES.forEach(function (p) { ph.appendChild(el("span", p[1], p[0] === s.phase ? "badge b-ok" : "badge b-none")); });
+    $("lv-now").textContent = ""; $("lv-now").appendChild(el("strong", s.now ? "Now: " + s.now : (s.phase || "Starting") + "…"));
+    $("lv-counts").textContent = s.found + " jobs found · " + s.new + " new · " + s.seen + " already known";
+    var box = $("lv-sources"); box.textContent = "";
+    Object.keys(s.plan).forEach(function (name) {
+      var c = s.plan[name], pct = c.total ? Math.round(100 * c.done / c.total) : 100;
+      var row = el("div", null, "stack", "gap: 4px");
+      var top = el("div", null, "rowx", "justify-content: space-between");
+      top.appendChild(el("strong", NAMES[name] || name));
+      top.appendChild(el("span", (STATUS[c.status] || c.status) + " · " + c.done + " of " + c.total + " searches · " + c.found + " jobs", "by"));
+      var bar = el("div", null, "bar"); bar.appendChild(el("span", null, null, "width:" + Math.max(pct, c.status === "running" ? 4 : 0) + "%; transition: width .6s ease"));
+      row.appendChild(top); row.appendChild(bar); box.appendChild(row);
+    });
+    var notes = $("lv-notes"); notes.textContent = "";
+    s.notes.forEach(function (n) { notes.appendChild(el("div", n, "notice")); });
+  }
+  function tick() {
+    fetch("/admin/sync/status", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (s) {
+      if (!s.running) { location.reload(); return; }
+      render(s); setTimeout(tick, 2000);
+    }).catch(function () { setTimeout(tick, 4000); });
+  }
+  render({{ prog|tojson }});
+  setTimeout(tick, 1500);
+})();
+</script>
+{% endif %}
 {% endblock %}

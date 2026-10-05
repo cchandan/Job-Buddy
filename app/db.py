@@ -76,7 +76,9 @@ class Person(Base):
 
 JOB_FIELDS = ["id", "title", "company", "location", "description", "url", "salary_min", "salary_max",
               "date_posted", "required_skills", "optional_skills", "sponsorship", "sponsorship_quote",
-              "work_mode", "work_mode_quote", "seniority", "industry", "tag_source", "deadline", "deadline_quote"]
+              "work_mode", "work_mode_quote", "seniority", "industry", "tag_source", "deadline", "deadline_quote",
+              "apply_url", "is_remote", "job_type", "salary_currency", "sources", "source_urls", "canonical_key",
+              "content_hash", "needs_ai", "matched", "licensed_sponsor", "citizenship_required"]
 
 
 class Job(Base):
@@ -104,6 +106,23 @@ class Job(Base):
     deadline_quote = Column(Text, default="")
     first_seen = Column(DateTime, default=utcnow)
     last_seen = Column(DateTime, default=utcnow)
+    # Kept from the sources, no AI needed
+    apply_url = Column(Text, default="")
+    is_remote = Column(Boolean)
+    job_type = Column(String(30), default="")
+    salary_currency = Column(String(8), default="")
+    sources = Column(JSON, default=list)        # which sites listed it
+    source_urls = Column(JSON, default=list)    # one link per site
+    canonical_key = Column(String(40), index=True)  # company + title + city: the same job on two sites shares it
+    content_hash = Column(String(40), default="")   # changes when the advert changes: tells us what to re-tag
+    needs_ai = Column(Boolean, default=False)       # tagged by keywords only; AI should look again when it can
+    matched = Column(JSON, default=list)            # ids of the people whose searches found it: their "For you" view
+    licensed_sponsor = Column(Boolean, default=False)       # the employer is on the Home Office sponsor register
+    citizenship_required = Column(Boolean, default=False)   # the advert says British citizens / UK nationals / clearance only
+    # Liveness
+    last_checked = Column(DateTime)             # last time its page was checked directly
+    closed_at = Column(DateTime)
+    close_reason = Column(String(60), default="")
 
 
 class StagedJob(Base):
@@ -175,17 +194,57 @@ class SyncRun(Base):
     updated = Column(Integer, default=0)
     unchanged = Column(Integer, default=0)
     failed = Column(Integer, default=0)
+    seen = Column(Integer, default=0)      # known jobs found again, nothing to change
+    closed = Column(Integer, default=0)    # jobs confirmed closed by a page check
 
     person = relationship(Person)
 
 
-class SearchSettings(Base):
-    """One row (id 1): what the daily fetch looks for."""
-    __tablename__ = "search_settings"
+class FetchState(Base):
+    """When each (source, search) last succeeded, so the next fetch asks only for what is newer."""
+    __tablename__ = "fetch_state"
+    key = Column(String(300), primary_key=True)
+    last_ok = Column(DateTime)
+
+
+class RunLog(Base):
+    """One refresh: its status and a summary. The events below tell the story."""
+    __tablename__ = "run_logs"
     id = Column(Integer, primary_key=True)
+    started = Column(DateTime, default=utcnow)
+    finished = Column(DateTime)
+    status = Column(String(12), default="running")  # running / complete / partial / failed
+    summary = Column(JSON, default=dict)
+
+
+class RunEvent(Base):
+    """A line in a run's log. Never holds advert text or secrets."""
+    __tablename__ = "run_events"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Integer, ForeignKey("run_logs.id", ondelete="CASCADE"), index=True, nullable=False)
+    at = Column(DateTime, default=utcnow)
+    level = Column(String(6), default="info")   # info / warn / error
+    stage = Column(String(12), default="")      # plan / fetch / tag / push / liveness
+    source = Column(String(30), default="")
+    message = Column(Text, default="")
+    data = Column(JSON)
+
+
+class SearchProfile(Base):
+    """What one person's refresh looks for. Jobs found by it are tagged with this person's id (their "For you" view)."""
+    __tablename__ = "search_profiles"
+    person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), primary_key=True)
     keywords = Column(Text, default="")
     locations = Column(Text, default="")
-    per_search = Column(Integer, default=25)
+    avoid = Column(Text, default="")            # title words that rule a job out for this person
+    distance = Column(Integer, default=25)      # miles around each location
+    per_search = Column(Integer, default=100)
+    remote_uk = Column(Boolean, default=False)  # also search UK-wide remote roles
+    uk_wide = Column(Boolean, default=False)    # also search the big UK cities
+    needs_sponsorship = Column(Boolean, default=False)  # rank sponsors first, hide citizenship-only jobs
+    enabled = Column(Boolean, default=True)
+
+    person = relationship(Person)
 
 
 class AIUsage(Base):
@@ -221,8 +280,15 @@ def job_row(raw):
         row[f] = int(row[f]) if row[f] else None
     if isinstance(row["deadline"], str):
         row["deadline"] = date.fromisoformat(row["deadline"]) if row["deadline"] else None
-    for f in ("sponsorship_quote", "work_mode_quote", "deadline_quote", "industry", "tag_source", "date_posted"):
+    for f in ("sponsorship_quote", "work_mode_quote", "deadline_quote", "industry", "tag_source", "date_posted",
+              "apply_url", "job_type", "salary_currency", "content_hash"):
         row[f] = row[f] or ""
+    row["sources"], row["source_urls"] = list(raw.get("sources") or []), list(raw.get("source_urls") or [])
+    row["needs_ai"] = bool(raw.get("needs_ai"))
+    row["matched"] = sorted(set(raw.get("matched") or []))
+    row["licensed_sponsor"], row["citizenship_required"] = bool(raw.get("licensed_sponsor")), bool(raw.get("citizenship_required"))
+    if row["is_remote"] is not None:
+        row["is_remote"] = bool(row["is_remote"])
     for f, default in (("sponsorship", "unclear"), ("work_mode", "unclear"), ("seniority", "junior")):
         row[f] = row[f] or default
     return row
@@ -244,8 +310,23 @@ def seed_jobs_if_empty(db):
     return len(rows)
 
 
+def _add_missing_sqlite_columns():
+    """SQLite has no Alembic here: add any column a newer version of the app expects, so an old local file keeps working."""
+    from sqlalchemy import inspect, text
+    have = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not have.has_table(table.name):
+                continue
+            known = {c["name"] for c in have.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in known:
+                    conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(engine.dialect)}'))
+
+
 def init_db():
     if IS_SQLITE:
         Base.metadata.create_all(engine)
+        _add_missing_sqlite_columns()
     with SessionLocal() as db:
         seed_jobs_if_empty(db)

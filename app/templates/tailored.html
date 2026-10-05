@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, cv_badge, csrf_field with context %}
+{% set e = v.entry %}{% set job = v.job %}
+{% block title %}Tailored CV · {{ job.title }}{% endblock %}
+{% block content %}
+<a class="lnk" href="/tracker/{{ e.id }}">Back to this job</a>
+<div class="head">
+  <div class="tight">
+    <h1 class="t">Tailored CV</h1>
+    <p class="sub">{{ job.title }} · {{ job.company }}</p>
+    <div class="rowx">{{ chip(v.chip) }}{{ cv_badge(tailored) }}</div>
+  </div>
+  {% if tailored %}
+  <div class="rowx">
+    <a class="btn" href="/tracker/{{ e.id }}/cv/print" target="_blank" rel="noopener">Download PDF</a>
+    {% if not blocked %}
+    <form method="post" action="/tracker/{{ e.id }}/cv/create" data-loading="Writing your tailored CV…" data-confirm="Regenerate this CV? Your edits will be replaced.">{{ csrf_field() }}<button class="btn">Regenerate</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if tailored and tailored.status in ("approved", "changes_requested") and tailored.reviewer %}
+<div class="{{ 'flash' if tailored.status == 'approved' else 'notice' }}" style="display: block">
+  <strong>{{ tailored.reviewer.first_name }} {{ "approved this CV" if tailored.status == "approved" else "asked for changes" }} · {{ tailored.reviewed_at|dmy }}</strong>
+  {% if tailored.review_comment %}<br>“{{ tailored.review_comment }}”{% endif %}
+</div>
+{% elif tailored and tailored.status == "in_review" %}
+<div class="info">Sent for review on {{ tailored.sent_at|dmy }}. You can still apply without waiting.</div>
+{% endif %}
+
+{% if not tailored %}
+<section class="card empty">
+  {% if blocked == "cv" %}
+    <h2 class="t2">Upload your CV first</h2><p class="sub">A tailored CV is built from your core CV, and you haven't uploaded one yet.</p><a class="btn btn--primary" href="/profile">Go to Profile</a>
+  {% elif blocked == "description" %}
+    <h2 class="t2">Add the job description first</h2><p class="sub">We need the advert's text to aim your CV at this job.</p>
+    {% if not e.job_id %}<a class="btn btn--primary" href="/tracker/{{ e.id }}/edit">Add the job description</a>{% endif %}
+  {% elif not ai_ready %}
+    <h2 class="t2">Tailoring isn't available right now</h2><p class="sub">The AI service isn't set up. Everything else in Job Buddy still works.</p>
+  {% else %}
+    <h2 class="t2">Create a CV aimed at this job</h2>
+    <p class="sub">We reorder and reword your core CV for this advert. Nothing is added that isn't already in your CV.</p>
+    <form method="post" action="/tracker/{{ e.id }}/cv/create" data-loading="Writing your tailored CV…">{{ csrf_field() }}<button class="btn btn--primary">Create tailored CV</button></form>
+  {% endif %}
+</section>
+{% else %}
+<div class="info">Check every line. This should only contain what is in your core CV.</div>
+<div class="cols2" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start">
+  <section class="stack" aria-label="Core CV">
+    <div class="head"><h2 class="t2">Your core CV</h2><span class="by">Read-only{% if core %} · uploaded {{ core.uploaded_at|dmy }}{% endif %}</span></div>
+    <div class="doc pre" style="min-height: 560px; background: var(--ground)">{{ core.text if core else "Your core CV has been deleted." }}</div>
+  </section>
+  <section class="stack" aria-label="Tailored CV">
+    <form method="post" action="/tracker/{{ e.id }}/cv/save" class="stack">
+      {{ csrf_field() }}
+      <div class="head"><label class="t2" for="text">Tailored for this job</label><span class="by">Saved {{ tailored.updated_at|when }}</span></div>
+      <textarea id="text" name="text" class="input" style="min-height: 560px; line-height: 1.6; font-size: 14px" maxlength="30000">{{ tailored.text }}</textarea>
+      {% if tailored.status == "approved" %}<p class="by">Editing an approved CV means it will need review again.</p>{% endif %}
+      <div class="rowx">
+        <button class="btn btn--primary" name="then" value="">Save</button>
+        <button class="btn" name="then" value="send">Save and send for review</button>
+      </div>
+    </form>
+  </section>
+</div>
+<form method="post" action="/tracker/{{ e.id }}/cv/delete" data-confirm="Delete this tailored CV? This cannot be undone.">{{ csrf_field() }}<button class="btn btn--danger">Delete this tailored CV</button></form>
+{% endif %}
+{% endblock %}

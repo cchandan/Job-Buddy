@@ -7,3 +7,6 @@ sqlalchemy
 psycopg2-binary
 google-genai
 python-dotenv
+alembic
+itsdangerous
+httpx

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, status_badge, meta, csrf_field with context %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div>
+  <h1 class="t">{{ greeting }}, {{ person.first_name }}</h1>
+  <p class="sub">{{ "Welcome to Job Buddy. Three steps and you're away." if getting_started else line }}</p>
+</div>
+
+{% if getting_started %}
+<section class="card" aria-label="Getting started">
+  <h2 class="t2" style="margin-bottom: 8px">Getting started</h2>
+  <ol class="steps">
+    <li><span class="tick {{ 'done' if has_cv }}">{{ "✓" if has_cv else "1" }}</span><span class="grow"><strong>Upload your CV</strong><br><span class="meta">It becomes the base for a CV tailored to each job.</span></span><a class="btn btn--primary" href="/profile">Go to Profile</a></li>
+    <li><span class="tick">2</span><span class="grow"><strong>Browse the Job Board</strong><br><span class="meta">{{ new_jobs }} jobs are waiting, each with its deadline.</span></span><a class="btn" href="/board">Open the Job Board</a></li>
+    <li><span class="tick">3</span><span class="grow"><strong>Shortlist your first job</strong><br><span class="meta">It moves to your Tracker, where you can tailor your CV and apply.</span></span><a class="btn" href="/tracker">See your Tracker</a></li>
+  </ol>
+</section>
+{% else %}
+
+<section class="card" aria-label="Do next">
+  <h2 class="t2" style="margin-bottom: 12px">Do next</h2>
+  {% for item in do_next %}
+  {% set v = item.view %}
+  <div class="next-row">
+    <div class="grow">
+      <div class="by">{{ item.text }}</div>
+      <a class="jt" href="/tracker/{{ v.entry.id }}" style="color: inherit; text-decoration: none">{{ v.job.title }}</a>
+      <div class="meta">{{ v.job.company }}</div>
+    </div>
+    <div class="rowx">
+      {{ chip(v.chip) }}
+      {% if item.kind == "review" %}<a class="btn btn--primary" href="/tracker/{{ v.entry.id }}/cv">Open CV</a>
+      {% elif item.kind == "applied" %}
+      <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
+      <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
+      {% elif item.kind == "deadline" and v.job.url %}
+      <form method="post" action="/tracker/{{ v.entry.id }}/apply" target="_blank" rel="noopener" data-apply>{{ csrf_field() }}<button class="btn btn--primary">Apply</button></form>
+      {% else %}<a class="btn btn--primary" href="/tracker/{{ v.entry.id }}">View job</a>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="sub">You're all caught up. Nothing needs doing today.</p>
+  {% endfor %}
+</section>
+
+<section aria-label="Your applications" class="stack">
+  <h2 class="t2">Your applications</h2>
+  <div class="tiles">
+    {% for s in STATUSES %}
+    <a class="tile" href="/tracker?status={{ s }}"><span class="num">{{ counts[s] }}</span>{{ status_badge(s) }}</a>
+    {% endfor %}
+  </div>
+</section>
+
+<section aria-label="This week" class="stack">
+  <div class="head"><h2 class="t2">This week</h2><a class="lnk" href="/calendar">Open Calendar</a></div>
+  <div class="week">
+    {% for d in week %}
+    <a href="/calendar" class="{{ 'has' if d.count }}" aria-label="{{ d.day.strftime('%A') }} {{ d.day|dmy }}: {{ d.count }} deadline{{ '' if d.count == 1 else 's' }}">
+      <span>{{ "Today" if loop.first else d.day.strftime("%a") }}</span><span>{{ d.day.day }}</span>
+      {% if d.count %}<span class="dot">{{ d.count }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card stack" aria-label="New on the Job Board">
+  <div class="head">
+    <div><h2 class="t2">Job Board</h2><p class="sub">{{ new_jobs }} new job{{ '' if new_jobs == 1 else 's' }} since you last looked</p></div>
+    <a class="btn btn--primary" href="/board">Open the Job Board</a>
+  </div>
+  {% for job in closing_soonest %}
+  <div class="next-row">
+    <div class="grow"><a class="jt" href="/board/{{ job.id }}" style="color: inherit; text-decoration: none">{{ job.title }}</a><div class="meta">{{ meta(job) }}</div></div>
+    {{ chip(chip_for(job.deadline, today)) }}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}

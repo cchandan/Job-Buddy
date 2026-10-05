@@ -1,66 +1,100 @@
-{% macro preview() %}<span class="preview">Preview</span>{% endmacro %}
+{# Shared pieces. Deadline and status look the same wherever a job appears. #}
 
-{% macro arrow() %}<svg width="14" height="10" viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 5h12M9 1l4 4-4 4"/></svg>{% endmacro %}
+{% macro csrf_field() %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
 
-{% macro steps(done) %}
-<ol class="steps">
-  {% for label in ("1 · Your CV", "2 · Dream jobs", "3 · Preferences", "4 · Confirm profile") %}
-  <li {% if loop.index <= done %}class="is-on"{% endif %}>{{ label }}</li>
-  {% endfor %}
-</ol>
+{% macro chip(c) %}<span class="chip {{ {'warn': 'chip--warn', 'urgent': 'chip--urgent', 'muted': 'chip--muted', 'none': 'chip--none'}.get(c.tone, '') }}">{{ c.text }}</span>{% endmacro %}
+
+{% macro status_badge(status) %}<span class="badge {{ {'shortlisted': 'b-short', 'applied': 'b-applied', 'interviewing': 'b-interview', 'offer': 'b-offer', 'rejected': 'b-rejected', 'withdrawn': 'b-withdrawn'}[status] }}">{{ STATUS_LABELS[status] }}</span>{% endmacro %}
+
+{% macro listing_badge(listing) %}<span class="badge {{ {'open': 'b-open', 'closing_soon': 'b-closing', 'closed': 'b-closed', 'possibly_closed': 'b-closed'}[listing] }}">{{ LISTING_LABELS[listing] }}</span>{% endmacro %}
+
+{% macro cv_badge(cv) %}{% if cv %}<span class="badge {{ {'draft': 'b-draft', 'in_review': 'b-review', 'approved': 'b-ok', 'changes_requested': 'b-changes'}[cv.status] }}">CV: {{ CV_LABELS[cv.status] }}</span>{% else %}<span class="badge b-none">No CV yet</span>{% endif %}{% endmacro %}
+
+{% macro meta(job, mode=True) %}{{ job.company or "Company not given" }}{% if job.location %} · {{ job.location }}{% endif %} · {{ salary(job) or "Salary not stated" }}{% if mode and job.work_mode in MODE_LABELS %} · {{ MODE_LABELS[job.work_mode] }}{% endif %}{% endmacro %}
+
+{% macro tags(job) %}
+{% if job.work_mode in MODE_LABELS %}<span class="tag">{{ MODE_LABELS[job.work_mode] }}</span>{% endif %}
+{% if job.seniority %}<span class="tag">{{ job.seniority|capitalize }}</span>{% endif %}
+<span class="tag">{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}</span>
 {% endmacro %}
 
-{% macro match_score(score, i=0) %}
-<div class="score" style="--s: {{ score }}; --i: {{ i }}" title="Match score">
-  <span class="score__n">{{ score }}</span><span class="score__pc">%</span>
-</div>
-<div class="meter" style="--s: {{ score }}" aria-hidden="true"><i></i></div>
-{% endmacro %}
+{% macro status_options(current) %}{% for s in STATUSES %}<option value="{{ s }}" {{ 'selected' if s == current }}>{{ STATUS_LABELS[s] }}</option>{% endfor %}{% endmacro %}
 
-{% macro sponsorship_badge(job) %}
-  {% if job.sponsorship == 'sponsors' %}<span class="tag tag--good">Sponsors visas</span>
-  {% elif job.sponsorship == 'no_sponsorship' %}<span class="tag tag--bad">No sponsorship</span>
-  {% else %}<span class="tag">Sponsorship unclear</span>{% endif %}
-{% endmacro %}
-
-{% macro money(n) %}£{{ "{:,}".format(n) }}{% endmacro %}
-
-{% macro salary(job) %}{% if job.salary_min %}{% if job.salary_max and job.salary_max != job.salary_min %}{{ money(job.salary_min) }} – {{ money(job.salary_max) }}{% else %}{{ money(job.salary_min) }}{% endif %}{% endif %}{% endmacro %}
-
-{% macro job_card(r, compact=False, rank=0, note='') %}
-{% set job = r.job %}
-{% set tone = 'blocked' if r.blocked else ('strong' if r.score >= 70 else 'fair' if r.score >= 45 else 'stretch') %}
-<article class="pass pass--{{ tone }}">
-  <div class="pass__head">
-    {% if rank and not r.blocked %}<span class="pass__rank">No. {{ rank }}</span>{% endif %}
-    {{ match_score(r.score, rank) }}
-  </div>
-  <div class="pass__body">
-    <h3 class="pass__title"><a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">{{ job.title }}</a></h3>
-    <p class="pass__meta">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}{% if job.work_mode != 'unclear' %} · {{ job.work_mode|capitalize }}{% endif %}{% set s = salary(job) %}{% if s|trim %} · {{ s }}{% endif %}</p>
-    <div class="tags">
-      {{ sponsorship_badge(job) }}
-      <span class="tag">{{ job.seniority|capitalize }}</span>
-      {% if job.industry %}<span class="tag">{{ job.industry }}</span>{% endif %}
+{# One Tracker entry. `v` comes from summary.entry_view. Read-only when an admin is viewing a user. #}
+{% macro entry_card(v, viewer, readonly, back, admin_user=None) %}
+{% set e = v.entry %}{% set job = v.job %}
+{% set href = ("/admin/users/%s/entry/%s" % (admin_user.id, e.id)) if admin_user else ("/tracker/%s" % e.id) %}
+<article class="card stack {{ 'dim' if v.passed }}">
+  <div class="job">
+    <div class="jmain">
+      <h2 class="jt"><a href="{{ href }}">{{ job.title }}</a></h2>
+      <div class="meta">{{ meta(job) }}</div>
+      <div class="rowx">
+        {{ chip(v.chip) }}
+        {% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}
+        {% if readonly %}{{ status_badge(e.status) }}{% endif %}
+        {{ cv_badge(v.cv) }}
+        {% if e.source == "assigned" and e.seen_at is none and not readonly %}<span class="badge b-new">New</span>{% endif %}
+      </div>
+      <div class="by">{{ added_by(e, viewer) }} · {{ e.created_at|dmy }}{% if e.notes %} · Notes: {{ e.notes|truncate(90) }}{% endif %}</div>
     </div>
-    {% if job.sponsorship_quote and job.sponsorship != 'unclear' %}
-    <blockquote class="quote {{ 'quote--bad' if job.sponsorship == 'no_sponsorship' else 'quote--good' }}">{{ job.sponsorship_quote }}”</blockquote>
-    {% endif %}
-    {% if r.blocked %}
-    <p class="pass__blocked">Blocked: {{ r.block_reason }}.</p>
-    {% endif %}
-    {% if not compact %}
-    <p class="pass__why">{{ r.why }}</p>
-    {% if r.strong_matches or r.missing_skills %}
-    <div class="pass__skills">
-      <div><div class="label">Strong matches</div>
-        <div class="chips">{% for s in r.strong_matches[:8] %}<span class="chip chip--have">{{ s }}</span>{% else %}<span class="none">None yet</span>{% endfor %}</div></div>
-      <div><div class="label">Missing skills</div>
-        <div class="chips">{% for s in r.missing_skills[:8] %}<span class="chip chip--miss">{{ s }}</span>{% else %}<span class="none">None</span>{% endfor %}</div></div>
+    <div class="jside">
+      {% if not readonly %}
+      <form method="post" action="/tracker/{{ e.id }}/status">
+        {{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}">
+        <label class="lab" for="status-{{ e.id }}">Status</label>
+        <select id="status-{{ e.id }}" name="status" class="input" data-autosubmit>{{ status_options(e.status) }}</select>
+        <noscript><button class="btn">Save status</button></noscript>
+      </form>
+      <div class="rowx">
+        <a class="btn" href="/tracker/{{ e.id }}/cv">{{ "Open tailored CV" if v.cv else "Create tailored CV" }}</a>
+        {% if job.url %}
+        <form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>
+          {{ csrf_field() }}<button class="btn {{ 'btn--primary' if e.status == 'shortlisted' and not v.passed }}">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button>
+        </form>
+        {% endif %}
+        <a class="btn" href="{{ href }}">Details</a>
+      </div>
+      {% else %}
+      <div class="rowx" style="justify-content: flex-end">
+        {% if v.cv %}<a class="btn" href="/admin/review/{{ e.id }}">View CV</a>{% endif %}
+        {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
+        <a class="btn" href="{{ href }}">Details</a>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-    {% endif %}
-    {% if note %}<p class="pass__note">{{ note }}</p>{% endif %}
   </div>
+  {% if e.apply_clicked_at and e.status == "shortlisted" and not readonly %}
+  <div class="notice">
+    <span>You opened this advert. Did you apply?</span>
+    <span class="rowx">
+      <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
+      <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
+    </span>
+  </div>
+  {% endif %}
 </article>
+{% endmacro %}
+
+{# The add-by-hand fields, shared by the user's form and the admin's assign panel. #}
+{% macro job_fields(d, deadline, notes) %}
+<div class="rowx" style="align-items: flex-end; gap: 12px">
+  <div class="field" style="flex: 2 1 240px"><label class="lab" for="f-title">Job title (needed)</label><input id="f-title" name="title" class="input" required maxlength="300" value="{{ d.get('title', '') }}"></div>
+  <div class="field" style="flex: 2 1 200px"><label class="lab" for="f-company">Company (needed)</label><input id="f-company" name="company" class="input" required maxlength="200" value="{{ d.get('company', '') }}"></div>
+</div>
+<div class="field"><label class="lab" for="f-url">Link to the advert</label><input id="f-url" name="url" type="url" class="input" maxlength="2000" placeholder="https://" value="{{ d.get('url', '') }}"></div>
+<div class="rowx" style="align-items: flex-end; gap: 12px">
+  <div class="field"><label class="lab" for="f-location">Location</label><input id="f-location" name="location" class="input" maxlength="200" value="{{ d.get('location', '') }}"></div>
+  <div class="field"><label class="lab" for="f-deadline">Deadline</label><input id="f-deadline" name="deadline" type="date" class="input" value="{{ deadline }}"></div>
+  <div class="field"><label class="lab" for="f-smin">Salary from (£ a year)</label><input id="f-smin" name="salary_min" inputmode="numeric" class="input" value="{{ d.get('salary_min') or '' }}"></div>
+  <div class="field"><label class="lab" for="f-smax">Salary to</label><input id="f-smax" name="salary_max" inputmode="numeric" class="input" value="{{ d.get('salary_max') or '' }}"></div>
+</div>
+<div class="rowx" style="align-items: flex-end; gap: 12px">
+  <div class="field"><label class="lab" for="f-mode">Work mode</label>
+    <select id="f-mode" name="work_mode" class="input">{% for value, label in (("unclear", "Not sure"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "Onsite")) %}<option value="{{ value }}" {{ 'selected' if d.get('work_mode') == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="lab" for="f-sponsor">Visa sponsorship</label>
+    <select id="f-sponsor" name="sponsorship" class="input">{% for value, label in (("unclear", "Not sure"), ("sponsors", "Sponsors visas"), ("no_sponsorship", "No sponsorship")) %}<option value="{{ value }}" {{ 'selected' if d.get('sponsorship') == value }}>{{ label }}</option>{% endfor %}</select></div>
+</div>
+<div class="field"><label class="lab" for="f-desc">Job description (needed to create a tailored CV)</label><textarea id="f-desc" name="description" class="input" style="min-height: 180px" maxlength="20000">{{ d.get('description', '') }}</textarea></div>
+<div class="field"><label class="lab" for="f-notes">Notes</label><textarea id="f-notes" name="notes" class="input" maxlength="4000">{{ notes }}</textarea></div>
 {% endmacro %}

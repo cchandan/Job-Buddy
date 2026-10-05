@@ -1,17 +1,19 @@
-"""Job description -> tags. Used by the ingest script only (never on the server).
+"""Job advert -> tags. Used when jobs are fetched (on an admin's laptop) and when a job is added by link.
 
-Gemma reads the fine print; code then checks everything Gemma said:
+AI reads the fine print; code then checks everything it said:
   * every evidence quote must appear word-for-word in the description, or the tag becomes "unclear"
   * a keyword safety net overrides "unclear" when the text plainly says "no sponsorship" etc.
+  * a deadline must have a quote that is in the advert and must be a real, plausible date, or it is "unknown"
   * every skill name goes through skills.canonical
-If Gemma is unavailable, a keyword-only tagger produces the same fields (tag_source = "keywords").
+If AI is unavailable, a keyword-only tagger produces the same fields (tag_source = "keywords").
 """
 import re
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel
 
-from . import gemma, skills
+from . import ai, deadlines, skills
 
 MAX_DESC_FOR_GEMMA = 6000
 
@@ -28,6 +30,8 @@ class JobTags(BaseModel):
     work_mode_quote: str = ""
     seniority: Literal["graduate", "junior", "mid", "senior"] = "junior"
     industry: str = ""
+    deadline: str = ""
+    deadline_quote: str = ""
 
 
 # ---------- quote checking ----------
@@ -176,28 +180,26 @@ def _money(s):
     return float(s[:-1]) * 1000 if s.endswith("k") else float(s)
 
 
-# ---------- role filter ----------
+# ---------- deadline ----------
 
-_SOFTWARE_TITLE = re.compile(
-    r"software|developer|full[- ]?stack|back[- ]?end|front[- ]?end|devops|programmer|python|java\b|web|cloud|platform|"
-    r"sre|test engineer|qa engineer|machine learning|data engineer|product engineer|engineering intern|swe\b|"
-    r"graduate engineer|technology graduate|it graduate", re.IGNORECASE)
-_NOT_SOFTWARE = re.compile(
-    r"planner|civil|structural|town|customer success|mechanical|electrical|building|construction|surveyor|"
-    r"environmental|sales|recruit|marketing|nurse|teacher", re.IGNORECASE)
+_DEADLINE_RE = re.compile(
+    r"(?:closing date|closes on|closing on|deadline|apply by|apply before|applications? (?:close|closes|must be received by|by)|"
+    r"application deadline|close date)[^.\n]{0,40}?(" + deadlines.DATE_RE + ")", re.IGNORECASE)
 
 
-def is_software_job(job):
-    """Keep software roles only: a software-sounding title and at least two recognised skills."""
-    title = job.get("title") or ""
-    if _NOT_SOFTWARE.search(title) or not _SOFTWARE_TITLE.search(title):
-        return False
-    return len(skills.find_skills(job.get("description") or "")) >= 2
+def keyword_deadline(description, today):
+    """(date, quote) when the advert plainly states a closing date, else (None, "")."""
+    text = re.sub(r"[*_]{1,3}", "", description or "")  # adverts often arrive as markdown: **23****rd** October
+    for m in _DEADLINE_RE.finditer(text):
+        found = deadlines.parse_date(m.group(1), today)
+        if found:
+            return found, m.group(0)
+    return None, ""
 
 
 # ---------- the tagger ----------
 
-PROMPT = """You are tagging a UK job advert for a graduate job-matching tool. Read the advert and fill in the JSON.
+PROMPT = """You are tagging a job advert for a job-tracking tool. Read the advert and fill in the JSON. Today is {today}.
 
 Rules:
 - required_skills / optional_skills: technical skills and tools only, short names (e.g. "Python", "React", "AWS").
@@ -206,6 +208,9 @@ Rules:
 - sponsorship_quote: the EXACT words from the advert that justify it, copied character for character. Empty if unclear.
 - work_mode: remote, hybrid, onsite or unclear. work_mode_quote: the exact words, only if the advert states it.
 - seniority: graduate, junior, mid or senior. industry: a short phrase such as "Fintech & Banking".
+- deadline: the closing date for applications as YYYY-MM-DD, ONLY if the advert states one. Empty if it does not.
+  Never guess, and never use the date the advert was posted.
+- deadline_quote: the EXACT words from the advert that state the closing date. Empty if there is none.
 
 Job title: {title}
 Company: {company}
@@ -216,9 +221,14 @@ Advert:
 """
 
 
-def finalize(job, tags, source):
-    """Check and clean tags (from Gemma or keywords) and return the fields stored on the job."""
+def finalize(job, tags, source, today=None):
+    """Check and clean tags (from AI or keywords) and return the fields stored on the job."""
     desc = job.get("description") or ""
+    today = today or date.today()
+
+    deadline, d_quote = deadlines.parse_date(tags.deadline, today), tags.deadline_quote
+    if deadline is None or not quote_in_text(d_quote, desc):
+        deadline, d_quote = keyword_deadline(desc, today)  # made-up quote or impossible date: never shown
 
     sponsorship, s_quote = tags.sponsorship, tags.sponsorship_quote
     if sponsorship != "unclear" and not quote_in_text(s_quote, desc):
@@ -241,6 +251,7 @@ def finalize(job, tags, source):
         "work_mode": work_mode, "work_mode_quote": _squash(w_quote),
         "seniority": tags.seniority, "industry": (tags.industry or "Technology").strip()[:80],
         "salary_min": lo, "salary_max": hi, "tag_source": source,
+        "deadline": deadline.isoformat() if deadline else None, "deadline_quote": _squash(d_quote) if deadline else "",
     }
 
 
@@ -255,13 +266,14 @@ def keyword_tags(job):
         industry=keyword_industry(title, job.get("company") or "", desc))
 
 
-def tag_job(job, use_gemma=True):
-    """Tag one job. Raises GemmaUnavailable when Gemma cannot be reached (the caller decides what to do)."""
-    if use_gemma:
-        prompt = PROMPT.format(title=job.get("title", ""), company=job.get("company", ""),
+def tag_job(job, use_ai=True, count=False, today=None):
+    """Tag one job. Raises AIUnavailable when AI cannot be reached (the caller decides what to do)."""
+    today = today or date.today()
+    if use_ai:
+        prompt = PROMPT.format(today=today.isoformat(), title=job.get("title", ""), company=job.get("company", ""),
                                description=(job.get("description") or "")[:MAX_DESC_FOR_GEMMA])
         try:
-            return finalize(job, gemma.ask_json(prompt, JobTags), "gemma")
-        except gemma.GemmaBadOutput:
+            return finalize(job, ai.ask_json(prompt, JobTags, count=count), "ai", today)
+        except ai.AIBadOutput:
             pass  # one odd answer should not stop the run: use keywords for this job only
-    return finalize(job, keyword_tags(job), "keywords")
+    return finalize(job, keyword_tags(job), "keywords", today)

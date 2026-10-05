@@ -16,6 +16,7 @@ JOBSPY_SITES = ["indeed", "linkedin", "glassdoor"]
 NOT_USED = {"bayt": "it is Middle East focused and returned non-UK jobs when tested", "zip_recruiter": "US and Canada only", "google": "Google Jobs is not working in JobSpy at the moment",
             "naukri": "India only", "bdjobs": "Bangladesh only"}
 MIN_DESCRIPTION = 200
+TAGGER_VERSION = "2"  # raise when the tagging rules improve: it changes every job's hash, so old tags are redone on the next refresh
 
 
 def jobspy_available():
@@ -71,7 +72,7 @@ def content_hash(raw):
     """Changes when the advert's wording changes, so unchanged jobs are never re-tagged. Case, spacing and
     punctuation are ignored, so a site reformatting the same text is not a change."""
     desc = _norm(raw.get("description"))
-    blob = "|".join([_norm(raw.get("title")), _norm(raw.get("company")), _norm(raw.get("location")), desc,
+    blob = "|".join([TAGGER_VERSION, _norm(raw.get("title")), _norm(raw.get("company")), _norm(raw.get("location")), desc,
                      str(raw.get("salary_min")), str(raw.get("salary_max")), str(raw.get("expires") or "")])
     return hashlib.sha1(blob.encode()).hexdigest()
 

@@ -616,3 +616,22 @@ def test_right_to_work_is_not_ranked_as_a_refusal_for_someone_who_needs_sponsors
         s.commit()
     page = signed_in("brother").get("/board").text
     assert page.index("Engineer A") < page.index("Engineer B") and page.index("Engineer C") < page.index("Engineer B")
+
+
+def test_codex_runs_the_cheapest_model_and_any_cli_failure_switches_it_off(monkeypatch):
+    ai.reset_backends()
+    seen = []
+    monkeypatch.setattr(ai.shutil, "which", lambda name: "/bin/" + name if name == "codex" else None)
+    monkeypatch.setattr(ai, "_ollama_up", lambda: False)
+
+    class Fail:
+        returncode, stdout, stderr = 1, "", "model not found for your plan"
+    monkeypatch.setattr(ai.subprocess, "run", lambda cmd, **k: seen.append(cmd) or Fail())
+    assert ai.tagging_backends() == ["codex"]
+    with pytest.raises(ai.AIUnavailable):
+        ai.ask_json("x", ingest.tagging.BatchOut, backends=("codex",))
+    cmd = seen[0]
+    assert cmd[:3] == ["codex", "exec", "--skip-git-repo-check"] and cmd[cmd.index("-m") + 1] == ai.CODEX_MODEL == "gpt-6-luna"
+    assert "--ephemeral" in cmd and "read-only" in cmd and 'model_reasoning_effort="low"' in cmd
+    assert ai.tagging_backends() == []  # not retried on every batch
+    ai.reset_backends()

@@ -62,6 +62,7 @@ def _call_model(prompt):
 # keeps using Gemini only. A backend that hits a limit is skipped for the rest of the run.
 TAGGING_BACKENDS = ("claude", "codex", "ollama", "gemini")
 CLAUDE_MODEL = os.getenv("TAGGING_CLAUDE_MODEL", "haiku")
+CODEX_MODEL = os.getenv("TAGGING_CODEX_MODEL", "gpt-6-luna")  # OpenAI's smallest, cheapest model, made for high-volume extraction
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3")
 CLI_TIMEOUT = 240
 _down = set()
@@ -102,9 +103,9 @@ def _run_cli(cmd, prompt, name):
     except subprocess.TimeoutExpired:
         raise AIUnavailable(f"{name} timed out")
     if done.returncode != 0:
+        _down.add(name)  # any failure (a limit, a bad model name, not signed in) switches this tool off for the rest of the run
         blob = (done.stderr + done.stdout).lower()
-        if "limit" in blob or "quota" in blob or "usage" in blob:
-            _down.add(name)
+        if "limit" in blob or "quota" in blob or "usage" in blob or "credit" in blob:
             raise AIUnavailable(f"{name} usage limit reached")
         raise AIUnavailable(f"{name} failed")
     return done.stdout
@@ -117,7 +118,9 @@ def _call_claude(prompt):
 
 def _call_codex(prompt):
     with tempfile.NamedTemporaryFile("r+", suffix=".txt") as out:
-        _run_cli(["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", out.name, "-"], prompt, "codex")
+        _run_cli(["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral", "-m", CODEX_MODEL,
+                  "-c", 'model_reasoning_effort="low"',  # extraction needs no deep thinking: cheaper and faster
+                  "-o", out.name, "-"], prompt, "codex")
         return out.read()
 
 

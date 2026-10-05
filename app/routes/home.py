@@ -14,7 +14,11 @@ def greeting(now=None):
 
 
 @router.get("/")
-def home(request: Request, database=Depends(auth.get_db), person=Depends(auth.current_person)):
+def home(request: Request, database=Depends(auth.get_db)):
+    try:
+        person = auth.current_person(request, database)
+    except auth.NeedLogin:
+        return web.page(request, "landing.html", None)
     if person.is_admin:
         return web.redirect("/admin")
     data = summary.user_home(database, person, web.today())

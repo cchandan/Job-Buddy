@@ -27,6 +27,8 @@ auth._N = 2 ** 4  # cheap password hashing so the tests are quick
 
 @pytest.fixture(autouse=True)
 def fresh_db(monkeypatch):
+    for key in ("BOOTSTRAP_ADMIN_NAME", "BOOTSTRAP_ADMIN_USERNAME", "BOOTSTRAP_ADMIN_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
     db.Base.metadata.drop_all(db.engine)
     db.Base.metadata.create_all(db.engine)
     monkeypatch.setattr(web, "today", lambda: TODAY)

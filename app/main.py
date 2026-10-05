@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, db, web
+from . import auth, bootstrap, db, web
 from .routes import admin, auth as auth_routes, board, calendar, cv, home, tracker
 
 log = logging.getLogger("jobbuddy")
@@ -19,6 +19,7 @@ log = logging.getLogger("jobbuddy")
 @asynccontextmanager
 async def lifespan(app):
     db.init_db()
+    bootstrap.ensure_admin()
     yield
 
 

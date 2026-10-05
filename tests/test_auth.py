@@ -6,7 +6,7 @@ from conftest import Browser, make_person, signed_in
 
 
 def test_every_page_needs_sign_in(browser):
-    for url in ("/", "/board", "/tracker", "/calendar", "/profile", "/admin", "/admin/review", "/admin/sync"):
+    for url in ("/board", "/tracker", "/calendar", "/profile", "/admin", "/admin/review", "/admin/sync"):
         r = browser.get(url)
         assert r.status_code == 303 and r.headers["location"].startswith("/login"), url
     assert browser.get("/health").status_code == 200
@@ -21,7 +21,17 @@ def test_sign_in_and_out(people):
     assert b.login("dad").status_code == 303
     assert b.get("/").headers["location"] == "/admin"  # admins land on Admin home
     b.post("/logout")
-    assert b.get("/").status_code == 303
+    assert b.get("/").status_code == 200
+
+
+def test_public_landing_page_contains_no_private_data(people, browser):
+    page = browser.get("/")
+    assert page.status_code == 200
+    assert 'href="/login"' in page.text
+    assert "Example workspace" in page.text
+    assert "Good morning, Wife" not in page.text
+    assert 'href="/admin"' not in page.text
+    assert page.headers["Cache-Control"] == "no-store"
 
 
 def test_wrong_details_give_the_same_message(people):

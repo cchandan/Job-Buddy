@@ -7,3 +7,4 @@ __pycache__/
 .DS_Store
 data/tag_cache.json
 .claude/
+data/sponsors.csv

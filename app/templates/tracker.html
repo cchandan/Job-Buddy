@@ -14,11 +14,7 @@
 </div>
 
 {% if not readonly %}
-<form method="post" action="/tracker/add-link" class="card rowx" style="align-items: flex-end; gap: 12px" data-loading="Reading the advert…">
-  {{ csrf_field() }}
-  <div class="field" style="flex: 3 1 280px"><label class="lab" for="url">Add a job from a link</label><input id="url" name="url" type="url" class="input" placeholder="Paste the link to the advert" required></div>
-  <button class="btn">Add from link</button>
-</form>
+
 {% else %}
 <section class="card stack" aria-label="Assign a job" style="border: 2px solid var(--cobalt)">
   <h2 class="t2">Assign a job to {{ owner.first_name }}</h2>
@@ -37,14 +33,7 @@
   </div>
   {% else %}{% if q|default('') %}<p class="sub">No open jobs match “{{ q }}”.</p>{% endif %}
   {% endfor %}
-  <details class="more" {{ 'open' if add == 'link' }}>
-    <summary class="lnk">Or paste a link</summary>
-    <form method="post" action="/admin/users/{{ owner.id }}/assign" class="rowx" style="align-items: flex-end; gap: 12px" data-loading="Reading the advert…">
-      {{ csrf_field() }}<input type="hidden" name="how" value="link">
-      <div class="field" style="flex: 3 1 280px"><label class="lab" for="aurl">Link to the advert</label><input id="aurl" name="url" type="url" class="input" required></div>
-      <button class="btn btn--primary">Assign from link</button>
-    </form>
-  </details>
+  
   <details class="more" {{ 'open' if add == 'manual' }}>
     <summary class="lnk">Or enter the job by hand</summary>
     <form method="post" action="/admin/users/{{ owner.id }}/assign" class="stack">
@@ -71,7 +60,7 @@
     {% if total == 0 %}
       <h2 class="t2">Nothing here yet</h2>
       {% if readonly %}<p class="sub">{{ owner.first_name }} hasn't shortlisted anything. Assign a job above to get them started.</p>
-      {% else %}<p class="sub">Shortlist jobs from the Job Board, or add one with a link.</p><a class="btn btn--primary" href="/board">Open the Job Board</a>{% endif %}
+      {% else %}<p class="sub">Shortlist jobs from the Job Board, or add one by hand.</p><a class="btn btn--primary" href="/board">Open the Job Board</a>{% endif %}
     {% else %}
       <h2 class="t2">No jobs with that status</h2><a class="btn" href="{{ base }}">Show all</a>
     {% endif %}

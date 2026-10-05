@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from app import ai, linkfetch, tagging
+from app import ai, tagging
 
 TODAY = date(2026, 10, 5)
 ADVERT = ("Junior developer wanted. You will use Python and AWS every day. "
@@ -55,9 +55,3 @@ def test_keyword_safety_net_when_ai_is_unsure_or_down():
     assert out["tag_source"] == "keywords" and "Python" in out["required_skills"]
 
 
-@pytest.mark.parametrize("url", ["http://localhost/job", "http://127.0.0.1:8000/admin", "http://10.0.0.5/x",
-                                 "http://192.168.1.1/", "http://169.254.169.254/latest/meta-data", "http://[::1]/",
-                                 "file:///etc/passwd", "ftp://example.com/x", "javascript:alert(1)", ""])
-def test_link_fetching_refuses_local_and_private_addresses(url):
-    with pytest.raises(linkfetch.LinkUnreadable):
-        linkfetch.check_url(url)

@@ -34,14 +34,18 @@ Sign-in is with a username and password. There is no sign-up: an admin creates e
 Without an AI key the Job Board, Tracker, Calendar and Profile still work; only tailored CVs and AI tagging are unavailable.
 
 ## Refresh the jobs (admins, on your own laptop)
-Job sites block cloud servers, so fetching runs on a laptop, not on the live site.
+Job sites block cloud servers, so refreshing runs on a laptop, not on the live site.
 
-    pip install -r requirements-ingest.txt
-    uvicorn app.main:app --reload
+**One click:** double-click `Refresh Jobs.command`. The first time it sets itself up; after that it just runs. It searches Indeed, LinkedIn and Glassdoor (plus Reed and Adzuna if you add their free keys to `.env`), merges the same job from different sites, tags **only jobs that are new or changed**, publishes them, and checks a few older jobs are still open. Each source is isolated, so one being blocked never stops the others.
 
-Sign in, open **Admin > Jobs sync**, set what to look for, press **Fetch and tag**, check the summary, then press **Sync to Job Board**. Your `.env` must point `DATABASE_URL` at the live database for the sync to reach everyone.
+Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **Refresh jobs**. The page shows a log of what happened: which sources were used or skipped and why, what failed, which AI tool tagged, and what was published.
 
-The same steps work from the command line: `python scripts/ingest_jobs.py fetch`, then `python scripts/ingest_jobs.py sync --as <your username>`.
+- **Each person has their own search** (Admin > Jobs sync > *Who we are searching for*): job titles, locations, miles around, words that rule a job out, UK-wide remote, the big UK cities, and "needs visa sponsorship". Priya's and Akanksh's starter searches are filled in the first time. Jobs go in one shared Job Board, tagged with whose search found them, and each person's Job Board opens on **For you** (their matches; for someone needing sponsorship, sponsors and licensed employers first and citizenship-only jobs hidden), with **Everything** one tap away.
+- **Licensed sponsors:** the Home Office register of licensed sponsors is downloaded weekly and employers on it get a "Licensed sponsor" badge. The advert's own sponsorship wording and quote are still read for every job.
+- **Nothing is capped, only paced:** LinkedIn and Glassdoor do a limited number of searches per run so they don't block us; the rest wait and go first next time. A search that comes back full is repeated with a bigger limit, and once a week every search looks back a full week in case a run was missed.
+- **Tagging** uses the first tool found on your laptop: the `claude` command (your own login, no API key), `codex`, Ollama, then `GEMINI_API_KEY`, then plain keywords. AI is asked only about sponsorship, work mode and closing date, and only when the advert mentions them and code could not settle it. Jobs tagged by keywords are upgraded on a later run.
+- **Publishing:** set `DATABASE_URL` to the live database, *or* (safer, no database password on your laptop) set `INGEST_URL` and the same `INGEST_TOKEN` here and on Render; then only the jobs the live site lacks are sent.
+- **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
 ## Deploy
 Create a Render web service from `render.yaml` and set the settings above. Use the Supabase **pooled** connection string for `DATABASE_URL`. Each deploy runs `alembic upgrade head`, which creates or updates the tables. Then run `python scripts/create_admin.py` once against the live database to make the first admin account.

@@ -10,10 +10,17 @@
   </div>
 </div>
 {% if board_age is not none and board_age > 3 %}
-<div class="notice"><span>The Job Board was last updated {{ board_age }} days ago, so some jobs may be out of date.{% if person.is_admin %} <a href="/admin/sync">Fetch today's jobs</a>{% endif %}</span></div>
+<div class="notice"><span>The Job Board was last updated {{ board_age }} days ago, so some jobs may be out of date.{% if person.is_admin %} <a href="/admin/sync">Refresh jobs</a>{% endif %}</span></div>
 {% endif %}
 
+{% if has_profile %}
+<nav class="rowx" aria-label="Which jobs">
+  <a class="btn {{ 'btn--primary' if forme }}" href="/board">For you</a>
+  <a class="btn {{ 'btn--primary' if not forme }}" href="/board?view=all">Everything</a>
+</nav>
+{% endif %}
 <form method="get" action="/board" class="card rowx" style="align-items: flex-end; gap: 12px">
+  {% if filters.view %}<input type="hidden" name="view" value="all">{% endif %}
   <div class="field" style="flex: 2 1 220px"><label class="lab" for="q">Search</label><input id="q" name="q" type="search" class="input" placeholder="Title or company" value="{{ filters.q }}"></div>
   <div class="field"><label class="lab" for="status">Listing status</label>
     <select id="status" name="status" class="input">{% for value, label in (("open", "Open"), ("closing_soon", "Closing soon"), ("possibly_closed", "Possibly closed"), ("closed", "Closed"), ("all", "All, including closed")) %}<option value="{{ value }}" {{ 'selected' if filters.status == value }}>{{ label }}</option>{% endfor %}</select></div>
@@ -25,7 +32,7 @@
   <div class="field"><label class="lab" for="seniority">Level</label>
     <select id="seniority" name="seniority" class="input">{% for value, label in (("", "Any"), ("graduate", "Graduate"), ("junior", "Junior"), ("mid", "Mid"), ("senior", "Senior")) %}<option value="{{ value }}" {{ 'selected' if filters.seniority == value }}>{{ label }}</option>{% endfor %}</select></div>
   <div class="field"><label class="lab" for="sort">Sort by</label>
-    <select id="sort" name="sort" class="input">{% for value, label in (("deadline", "Deadline, soonest"), ("newest", "Newest"), ("company", "Company")) %}<option value="{{ value }}" {{ 'selected' if filters.sort == value }}>{{ label }}</option>{% endfor %}</select></div>
+    <select id="sort" name="sort" class="input">{% for value, label in (("best", "Best match"), ("deadline", "Deadline, soonest"), ("newest", "Recently added"), ("company", "Company")) %}<option value="{{ value }}" {{ 'selected' if filters.sort == value }}>{{ label }}</option>{% endfor %}</select></div>
   <button class="btn btn--primary">Show</button>
 </form>
 
@@ -36,11 +43,11 @@
     <div class="jmain">
       <h2 class="jt"><a href="/board/{{ job.id }}">{{ job.title }}</a></h2>
       <div class="meta">{{ meta(job, mode=False) }}</div>
-      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}</div>
+      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}{% if job.licensed_sponsor %}<span class="tag">Licensed sponsor</span>{% endif %}{% if job.citizenship_required %}<span class="tag">UK citizens only?</span>{% endif %}</div>
       {% if job.sponsorship_quote and job.sponsorship != "unclear" %}<div class="quote">“{{ job.sponsorship_quote|truncate(180) }}”</div>{% endif %}
     </div>
     <div class="jside" style="align-items: flex-end; justify-content: space-between">
-      <div class="by">First seen {{ job.first_seen|dmy }}</div>
+      <div class="by">Added to the Board {{ job.first_seen|when }}</div>
       {% if person.is_admin %}
         {% if users %}
         <form method="post" action="/admin/assign" class="rowx">

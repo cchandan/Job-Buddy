@@ -14,6 +14,8 @@ LISTING_LABELS = {"open": "Open", "closing_soon": "Closing soon", "closed": "Clo
 
 def listing_status(job, today):
     """open / closing_soon / closed / possibly_closed."""
+    if getattr(job, "closed_at", None):
+        return "closed"  # a page check found the advert gone or expired
     if job.deadline:
         if job.deadline < today:
             return "closed"

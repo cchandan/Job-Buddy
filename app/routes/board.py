@@ -12,12 +12,16 @@ PAGE_SIZE = 60
 @router.get("/board")
 def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.current_person), q: str = "",
           status: str = "open", location: str = "", work_mode: str = "", sponsorship: str = "", seniority: str = "",
-          sort: str = "deadline", page: int = 1):
+          sort: str = "", view: str = "", page: int = 1):
     today = web.today()
     since = person.last_board_visit
     mine = {} if person.is_admin else {
         e.job_id: e for e in database.query(db.TrackerEntry).filter(db.TrackerEntry.person_id == person.id) if e.job_id}
 
+    profile = None if person.is_admin else database.get(db.SearchProfile, person.id)
+    has_profile = bool(profile and profile.enabled and (profile.keywords or "").strip())
+    forme = has_profile and view != "all"  # their own matches by default; "Everything" is one tap away
+    sort = sort or ("best" if forme else "deadline")
     rows = []
     needle, place = q.strip().lower(), location.strip().lower()
     for job in database.query(db.Job):
@@ -25,6 +29,8 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
         if status == "open" and listing == "closed":
             continue  # closed jobs are hidden unless asked for
         if status in ("closing_soon", "closed", "possibly_closed") and listing != status:
+            continue
+        if forme and (person.id not in (job.matched or []) or (profile.needs_sponsorship and job.citizenship_required)):
             continue
         if needle and needle not in f"{job.title} {job.company}".lower():
             continue
@@ -39,7 +45,19 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
         rows.append({"job": job, "listing": listing, "chip": deadlines.chip(job.deadline, today),
                      "entry": mine.get(job.id), "is_new": bool(since and job.first_seen and job.first_seen > since)})
 
-    if sort == "newest":
+    if sort == "best":  # sponsors first for someone who needs a visa, then the most recently added
+        def tier(job):
+            if not (forme and profile.needs_sponsorship):
+                return 0
+            if job.sponsorship == "sponsors":
+                return 0
+            if job.licensed_sponsor:
+                return 1
+            # "must have the right to work in the UK" is not a refusal to sponsor, and the Graduate visa gives that right
+            refuses = job.sponsorship == "no_sponsorship" and "sponsor" in (job.sponsorship_quote or "").lower()
+            return 3 if refuses else 2
+        rows.sort(key=lambda r: (tier(r["job"]), -(r["job"].first_seen or db.utcnow()).timestamp()))
+    elif sort == "newest":
         rows.sort(key=lambda r: r["job"].first_seen or db.utcnow(), reverse=True)
     elif sort == "company":
         rows.sort(key=lambda r: (r["job"].company or "").lower())
@@ -51,11 +69,11 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     page = min(max(page, 1), pages)
     shown = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
     filters = {"q": q, "status": status, "location": location, "work_mode": work_mode, "sponsorship": sponsorship,
-               "seniority": seniority, "sort": sort}
+               "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else ""}
     query = "&".join(f"{k}={v}" for k, v in filters.items() if v)
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all() if person.is_admin else []
     response = web.page(request, "board.html", person, "board", database=database, rows=shown, total=total, page=page,
-                        pages=pages, filters=filters, query=query, last_sync=ingest.last_sync(database),
+                        pages=pages, filters=filters, query=query, has_profile=has_profile, forme=forme, last_sync=ingest.last_sync(database),
                         board_age=ingest.board_age_days(database, today), users=users)
     person.last_board_visit = db.utcnow()
     database.commit()

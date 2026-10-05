@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>CV · {{ job.title }}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; font-size: 11.5pt; line-height: 1.45; color: #000; background: #fff; margin: 0; }
+    .sheet { max-width: 720px; margin: 0 auto; padding: 32px 24px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bar { font-family: system-ui, sans-serif; background: #12142b; color: #fff; padding: 12px 24px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .bar button { font: inherit; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 0; background: #c9f23c; color: #12142b; cursor: pointer; }
+    @page { margin: 18mm; }
+    @media print { .bar { display: none; } .sheet { padding: 0; max-width: none; } }
+  </style>
+</head>
+<body>
+<div class="bar"><span>To save as a PDF, press the button and choose “Save as PDF” as the printer.</span><button onclick="window.print()">Save as PDF</button></div>
+<div class="sheet">{{ text }}</div>
+</body>
+</html>

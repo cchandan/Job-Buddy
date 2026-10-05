@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}Review CVs{% endblock %}
+{% block content %}
+<div>
+  <h1 class="t">Review CVs</h1>
+  <p class="sub">{{ queue|length }} waiting{{ " · oldest first" if queue }}</p>
+</div>
+{% if queue %}
+<div class="card scroll" style="padding: 8px">
+  <table class="tb">
+    <thead><tr><th>Who</th><th>Job</th><th>Deadline</th><th>Sent</th><th></th></tr></thead>
+    <tbody>
+      {% for item in queue %}
+      <tr>
+        <td><strong>{{ item.entry.person.first_name }}</strong></td>
+        <td>{{ item.job.title }} · {{ item.job.company }}</td>
+        <td>{{ chip(item.chip) }}</td>
+        <td>{{ item.cv.sent_at|dmy }}</td>
+        <td><a class="btn btn--primary" href="/admin/review/{{ item.entry.id }}">Review</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card empty"><h2 class="t2">Nothing to review</h2><p class="sub">Tailored CVs appear here when someone sends one for review.</p><a class="btn" href="/admin">Back to Admin home</a></div>
+{% endif %}
+{% endblock %}

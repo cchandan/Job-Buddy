@@ -1,7 +1,0 @@
-[
-  {"title": "Graduate Software Engineer", "company": "NatWest", "description": "Join our graduate programme building backend services. You will use Python or Java, REST APIs, SQL, AWS and Docker, and work in agile teams with CI/CD pipelines. Nice to have: Kubernetes."},
-  {"title": "Graduate Backend Engineer", "company": "Sage", "description": "Build cloud services in C# and .NET on Azure. Experience with SQL, unit testing and Git. Agile delivery."},
-  {"title": "Junior Python Developer", "company": "", "description": ""},
-  {"title": "Graduate Cloud Engineer", "company": "Barclays", "description": "Work with AWS, Terraform, Docker, Kubernetes and Python to automate infrastructure. CI/CD and Linux knowledge expected."},
-  {"title": "Junior Full Stack Developer", "company": "", "description": "React, TypeScript, Node.js and PostgreSQL."}
-]

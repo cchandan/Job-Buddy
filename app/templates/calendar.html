@@ -1,27 +1,69 @@
 {% extends "base.html" %}
-{% import "_macros.html" as m %}
-{% block title %}Calendar{% endblock %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}{{ (owner.first_name ~ "'s Calendar") if readonly else "Calendar" }}{% endblock %}
 {% block content %}
-<header class="page-head">
-  <h1>Calendar {{ m.preview() }}</h1>
-  <p>Sample events to show where this is heading. These are not real dates and can't be edited yet.</p>
-</header>
-<section class="section">
-  <div class="section__head"><h2>Upcoming</h2></div>
-  <ul class="panel panel--tight rows">
-    {% for date, kind, tone, title, note in [
-      ("12 Nov", "Deadline", "bad", "Graduate Software Engineer applications close", "Sample grad scheme · apply this week"),
-      ("19 Nov", "Hackathon", "info", "Student hackathon: build something in 24 hours", "Sample event · good for your portfolio"),
-      ("26 Nov", "Networking", "good", "Tech meetup: Python & Cloud", "Sample event · a chance to meet engineers"),
-      ("03 Dec", "Assessment", "warn", "Online coding assessment", "Sample · practise data structures first"),
-      ("10 Dec", "Career fair", "sky", "Graduate careers fair", "Sample event"),
-    ] %}
-    <li class="event">
-      <div class="event__date">{{ date }}</div>
-      <div><div class="row__title">{{ title }}</div><div class="row__meta">{{ note }}</div></div>
-      <span class="tag tag--{{ tone }}">{{ kind }}</span>
-    </li>
+<div class="head">
+  <div>
+    <h1 class="t">{{ (owner.first_name ~ "'s Calendar") if readonly else "Calendar" }}</h1>
+    <p class="sub">Deadlines from {{ (owner.first_name ~ "'s") if readonly else "your" }} Tracker</p>
+  </div>
+  <div class="rowx"><span class="ev" style="padding: 4px 10px">Still to apply</span><span class="ev ev--done" style="padding: 3px 10px">Already applied</span></div>
+</div>
+
+{% if not has_any %}
+<div class="card empty"><h2 class="t2">No deadlines yet</h2><p class="sub">They appear here when a job in the Tracker has one.</p>
+  {% if not readonly %}<a class="btn btn--primary" href="/board">Open the Job Board</a>{% endif %}</div>
+{% else %}
+<div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start">
+
+  <section class="stack" aria-label="Upcoming deadlines" style="flex: 1 1 320px; min-width: 0">
+    <h2 class="t2">Upcoming</h2>
+    {% for label, items in groups.items() if items %}
+    <div class="card stack">
+      <div class="lab">{{ label }}</div>
+      {% for v in items %}
+      <a href="{{ entry_base }}/{{ v.entry.id }}" style="color: inherit; text-decoration: none; display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 44px">
+        <span><strong>{{ v.job.title }}</strong><br><span class="meta">{{ v.job.company }} · {{ v.deadline.strftime("%a") }} {{ v.deadline|dmy }}</span></span>
+        {{ status_badge(v.entry.status) }}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card"><p class="sub">No deadlines coming up.</p></div>
     {% endfor %}
-  </ul>
-</section>
+
+    {% if undated %}
+    <div class="card stack" style="border-style: dashed">
+      <div class="lab">No deadline set</div>
+      {% for v in undated %}
+      <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center">
+        <span><strong>{{ v.job.title }}</strong><br><span class="meta">{{ v.job.company }}</span></span>
+        <a class="btn" href="{{ entry_base }}/{{ v.entry.id }}">{{ "View" if readonly else "Set deadline" }}</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="stack" aria-label="Month view" style="flex: 2 1 560px; min-width: 0">
+    <div class="head">
+      <h2 class="t2">{{ month.strftime("%B %Y") }}</h2>
+      <div class="rowx"><a class="btn" href="{{ base }}?m={{ prev }}">Previous</a><a class="btn" href="{{ base }}">Today</a><a class="btn" href="{{ base }}?m={{ next }}">Next</a></div>
+    </div>
+    <div class="scroll">
+      <div class="cal">
+        {% for name in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun") %}<div class="dow">{{ name }}</div>{% endfor %}
+        {% for week in weeks %}{% for d in week %}
+        <div class="day {{ 'day--off' if not d.in_month }} {{ 'day--today' if d.day == today }}">
+          <span class="dn">{{ d.day.day }}{{ " · Today" if d.day == today }}</span>
+          {% for v in d.jobs %}
+          <a class="ev {{ 'ev--done' if v.entry.status in DONE }}" href="{{ entry_base }}/{{ v.entry.id }}" title="{{ v.job.title }} · {{ v.job.company }} · {{ STATUS_LABELS[v.entry.status] }}" {% if d.day < today and v.entry.status == "shortlisted" %}style="background: var(--soft)"{% endif %}>{{ v.job.company or v.job.title }}</a>
+          {% endfor %}
+        </div>
+        {% endfor %}{% endfor %}
+      </div>
+    </div>
+  </section>
+</div>
+{% endif %}
 {% endblock %}

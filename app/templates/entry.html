@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, status_badge, cv_badge, meta, tags, csrf_field, status_options with context %}
+{% set e = v.entry %}{% set job = v.job %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+{% set back = ("/admin/users/%s/tracker" % owner.id) if readonly else "/tracker" %}
+<a class="lnk" href="{{ back }}">Back to {{ (owner.first_name ~ "'s Tracker") if readonly else "your Tracker" }}</a>
+<div class="head">
+  <div class="tight">
+    <h1 class="t">{{ job.title }}</h1>
+    <p class="sub">{{ meta(job) }}</p>
+    <div class="rowx">{{ chip(v.chip) }}{% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}{{ status_badge(e.status) }}{{ cv_badge(v.cv) }}{{ tags(job) }}</div>
+    <div class="by">{{ added_by(e, person) }} · {{ e.created_at|dmy(True) }}</div>
+  </div>
+  <div class="rowx">
+    {% if not readonly %}
+      <a class="btn" href="/tracker/{{ e.id }}/cv">{{ "Open tailored CV" if v.cv else "Create tailored CV" }}</a>
+      {% if job.url %}<form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>{{ csrf_field() }}<button class="btn btn--primary">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button></form>{% endif %}
+    {% else %}
+      {% if v.cv %}<a class="btn" href="/admin/review/{{ e.id }}">View CV</a>{% endif %}
+      {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if e.apply_clicked_at and e.status == "shortlisted" and not readonly %}
+<div class="notice">
+  <span>You opened this advert. Did you apply?</span>
+  <span class="rowx">
+    <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/tracker/{{ e.id }}"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
+    <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/tracker/{{ e.id }}"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
+  </span>
+</div>
+{% endif %}
+
+<div class="cols2" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start">
+  <section class="card stack" aria-label="Status">
+    <h2 class="t2">Status</h2>
+    {% if not readonly %}
+    <form method="post" action="/tracker/{{ e.id }}/status" class="rowx" style="align-items: flex-end">
+      {{ csrf_field() }}<input type="hidden" name="next" value="/tracker/{{ e.id }}">
+      <div class="field"><label class="lab" for="status">Where is this application?</label><select id="status" name="status" class="input">{{ status_options(e.status) }}</select></div>
+      <button class="btn btn--primary">Save</button>
+    </form>
+    {% endif %}
+    <ul class="tight">
+      {% for h in (e.status_history or [])|reverse %}
+      <li class="by">{{ STATUS_LABELS[h.status] }} · {{ h.at[:10] }}{% if people.get(h.by) %} · by {{ "you" if h.by == person.id else people[h.by] }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card stack" aria-label="Deadline">
+    <h2 class="t2">Deadline</h2>
+    <div>
+      {% if job.deadline %}The advert says <strong>{{ job.deadline|dmy(True) }}</strong>{% if job.deadline_quote %} <span class="quote">“{{ job.deadline_quote }}”</span>{% endif %}
+      {% else %}The advert doesn't state a deadline.{% endif %}
+      {% if e.deadline_override %}<br>Your own deadline: <strong>{{ e.deadline_override|dmy(True) }}</strong> (this is the one used).{% endif %}
+    </div>
+    {% if not readonly %}
+    <form method="post" action="/tracker/{{ e.id }}/deadline" class="rowx" style="align-items: flex-end">
+      {{ csrf_field() }}
+      <div class="field"><label class="lab" for="deadline">Set or correct the deadline</label><input id="deadline" name="deadline" type="date" class="input" value="{{ e.deadline_override.isoformat() if e.deadline_override else '' }}"></div>
+      <button class="btn btn--primary">Save</button>
+    </form>
+    <p class="by">Leave it empty and save to go back to the advert's date.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if not readonly %}
+<section class="card stack" aria-label="Notes">
+  <form method="post" action="/tracker/{{ e.id }}/notes" class="stack">
+    {{ csrf_field() }}
+    <div class="field"><label class="t2" for="notes">Notes</label><textarea id="notes" name="notes" class="input" maxlength="4000" placeholder="Only you can see these.">{{ e.notes or "" }}</textarea></div>
+    <div><button class="btn">Save notes</button></div>
+  </form>
+</section>
+{% endif %}
+
+<section class="card stack" aria-label="Job description">
+  <div class="head"><h2 class="t2">Job description</h2>
+    {% if not readonly and not e.job_id %}<a class="btn" href="/tracker/{{ e.id }}/edit">Edit job details</a>{% endif %}</div>
+  {% if job.sponsorship_quote %}<div><span class="lab">Visa sponsorship</span>{{ SPONSOR_LABELS[job.sponsorship] }} <span class="quote">“{{ job.sponsorship_quote }}”</span></div>{% endif %}
+  {% if job.description %}<div class="pre">{{ job.description }}</div>
+  {% else %}<p class="sub">No description yet. {{ "Add one to be able to create a tailored CV." if not readonly }}</p>{% endif %}
+</section>
+
+{% if not readonly %}
+<form method="post" action="/tracker/{{ e.id }}/remove" data-confirm="Remove this job from your Tracker? Its tailored CV and notes will be deleted too.">
+  {{ csrf_field() }}<button class="btn btn--danger">Remove from Tracker</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="panel panel--center">
-  <h1>{{ title }}</h1>
-  <p>{{ message }}</p>
-  <div class="actions">
-    {% if retry %}<a href="javascript:history.back()" class="btn">Go back and retry</a>{% endif %}
-    <a href="/" class="btn btn--ghost">Home</a>
+<div class="card empty">
+  <h1 class="t">{{ title }}</h1>
+  <p class="sub">{{ message }}</p>
+  <div class="rowx">
+    {% if retry %}<a href="javascript:history.back()" class="btn">Go back and try again</a>{% endif %}
+    <a href="/" class="btn btn--primary">{{ "Home" if person else "Sign in" }}</a>
   </div>
 </div>
 {% endblock %}

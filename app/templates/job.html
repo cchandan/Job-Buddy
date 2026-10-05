@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip as chip_m, status_badge, listing_badge, meta, tags, csrf_field with context %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<a class="lnk" href="/board">Back to the Job Board</a>
+<div class="head">
+  <div class="tight">
+    <h1 class="t">{{ job.title }}</h1>
+    <p class="sub">{{ meta(job) }}</p>
+    <div class="rowx">{{ chip_m(chip) }}{{ listing_badge(listing) }}{{ tags(job) }}</div>
+  </div>
+  <div class="rowx">
+    {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View the advert</a>{% endif %}
+    {% if person.is_admin %}
+      {% for u in users %}
+      <form method="post" action="/admin/users/{{ u.id }}/assign">{{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="next" value="/board/{{ job.id }}"><button class="btn btn--primary">Assign to {{ u.first_name }}</button></form>
+      {% endfor %}
+    {% elif entry %}
+      {{ status_badge(entry.status) }}<a class="btn btn--primary" href="/tracker/{{ entry.id }}">In your Tracker</a>
+    {% else %}
+      <form method="post" action="/board/{{ job.id }}/shortlist">{{ csrf_field() }}<input type="hidden" name="next" value="/board/{{ job.id }}"><button class="btn btn--primary">Shortlist</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<section class="card stack" aria-label="What the advert says">
+  <h2 class="t2">What the advert says</h2>
+  <div><span class="lab">Deadline</span>{% if job.deadline %}{{ job.deadline|dmy(True) }}{% if job.deadline_quote %} <span class="quote">“{{ job.deadline_quote }}”</span>{% endif %}{% else %}Not stated in the advert{% endif %}</div>
+  <div><span class="lab">Visa sponsorship</span>{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}{% if job.sponsorship_quote %} <span class="quote">“{{ job.sponsorship_quote }}”</span>{% endif %}</div>
+  <div><span class="lab">Work mode</span>{{ MODE_LABELS.get(job.work_mode, "Not stated") }}{% if job.work_mode_quote %} <span class="quote">“{{ job.work_mode_quote }}”</span>{% endif %}</div>
+  {% if job.required_skills %}<div><span class="lab">Skills asked for</span><div class="rowx">{% for s in job.required_skills %}<span class="tag">{{ s }}</span>{% endfor %}</div></div>{% endif %}
+  <div class="by">First seen {{ job.first_seen|dmy(True) }} · last found {{ job.last_seen|dmy(True) }}</div>
+</section>
+
+<section class="card stack" aria-label="Job description">
+  <h2 class="t2">Job description</h2>
+  <div class="pre">{{ job.description }}</div>
+</section>
+{% endblock %}

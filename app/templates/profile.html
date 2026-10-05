@@ -1,59 +1,70 @@
 {% extends "base.html" %}
-{% import "_macros.html" as m %}
-{% block title %}Your profile{% endblock %}
+{% from "_macros.html" import csrf_field with context %}
+{% block title %}{{ (owner.first_name ~ "'s Profile") if readonly else "Profile" }}{% endblock %}
 {% block content %}
-<header class="page-head">
-  <h1>Your career profile</h1>
-  <p>Here's what we picked up. Fix anything that's wrong, then continue.</p>
-</header>
-
-{{ m.steps(4) }}
-
-{% if notice == 'basic' %}<div class="notice notice--warn">The AI helper wasn't available, so this is a basic profile built by scanning your CV for known skills. Ranking and skill gaps work as normal; there's just no written summary.</div>{% endif %}
-{% if notice == 'limit' %}<div class="notice notice--warn">The AI helper has reached its usage limit for now, so this is a basic profile. Ranking and skill gaps work as normal.</div>{% endif %}
-{% if saved %}<div class="notice notice--good" role="status">Saved.</div>{% endif %}
-
-{% if visitor.summary %}<p class="summary">{{ visitor.summary }}</p>{% endif %}
-
-<div class="cols">
-  <section class="panel facts">
-    <h2 class="h2">Target roles</h2>
-    <div class="chips">{% for r in visitor.target_roles %}<span class="chip">{{ r }}</span>{% else %}<span class="none">None yet</span>{% endfor %}</div>
-    <h2 class="h2">Experience level</h2>
-    <p>{{ visitor.level|capitalize }}</p>
-    {% if visitor.domains %}<h2 class="h2">Domains</h2>
-    <div class="chips">{% for d in visitor.domains %}<span class="chip">{{ d }}</span>{% endfor %}</div>{% endif %}
-    <h2 class="h2">Skills your dream jobs share</h2>
-    <div class="chips">{% for s, n in shared %}<span class="chip">{{ s }}{% if n > 1 %} · {{ n }} jobs{% endif %}</span>{% else %}<span class="none">Add a job description to see this.</span>{% endfor %}</div>
-  </section>
-
-  <section class="panel facts">
-    <h2 class="h2">Your skills ({{ visitor.skills|length }})</h2>
-    {% if visitor.skills|length < 5 %}<p style="color: var(--amber-ink)">We found only a few skills. Add the ones we missed below.</p>{% endif %}
-    <form method="post" action="/profile/edit" class="stack">
-      <textarea name="skills_text" rows="5" aria-label="Your skills" class="textarea">{{ visitor.skills|join(', ') }}</textarea>
-      <p class="muted" style="font-size: 0.8125rem">Comma-separated. Remove or add skills; spelling is tidied automatically.</p>
-      <label class="field">Level
-        <select name="level" class="select select--inline">{% for l in levels %}<option value="{{ l }}" {{ 'selected' if l == visitor.level }}>{{ l|capitalize }}</option>{% endfor %}</select></label>
-      <button class="btn btn--ghost">Save changes</button>
-    </form>
-  </section>
+<div>
+  <h1 class="t">{{ (owner.first_name ~ "'s Profile") if readonly else "Profile" }}</h1>
+  <p class="sub">The core CV is the base for every tailored CV.</p>
 </div>
 
-<section class="panel facts" style="margin-top: 1rem">
-  <h2 class="h2">Dream jobs</h2>
-  <ul class="dream-list">
-    {% for j in visitor.dream_jobs %}<li><strong>{{ j.title }}</strong>{% if j.company %} · {{ j.company }}{% endif %}
-      <span class="muted">— {{ j.skills[:6]|join(', ') if j.skills else 'no skills found' }}</span></li>{% endfor %}
-  </ul>
-  <p class="prefs">Preferences: {% set p = visitor.preferences %}<span class="chips chips--inline">{% if p.needs_sponsorship %}<span class="tag tag--solid">must-have: sponsorship</span>{% endif %}{% if p.min_salary %}<span class="tag tag--solid">must-have: £{{ "{:,}".format(p.min_salary) }}+</span>{% endif %}{% for x in (p.locations or []) + (p.industries or []) + (p.technologies or []) %}<span class="chip">{{ x }}</span>{% endfor %}</span>{% if not (p.needs_sponsorship or p.min_salary or p.locations or p.industries or p.technologies) %}none set{% endif %}</p>
+<section class="card rowx" style="gap: 16px">
+  <span class="av" style="width: 56px; height: 56px; font-size: 22px">{{ owner.initial }}</span>
+  <div class="grow">
+    <div class="t2">{{ owner.name }}</div>
+    <div class="meta">Username: {{ owner.username }} · {{ "Admin" if owner.is_admin else "User" }}</div>
+  </div>
 </section>
 
-<div class="actions" style="margin-top: 1.75rem">
-  <form method="post" action="/analyse" data-loading="Finding your skill gaps and project ideas…">
-    <input type="hidden" name="next" value="/this-week">
-    <button class="btn btn--lg">Looks right, continue {{ m.arrow() }}</button>
+<section class="card stack" aria-label="Core CV">
+  <div class="head"><h2 class="t2">Core CV</h2>{% if cv %}<span class="badge b-ok">Uploaded</span>{% else %}<span class="badge b-none">None yet</span>{% endif %}</div>
+  {% if cv %}
+  <div class="doc rowx" style="justify-content: space-between; gap: 16px">
+    <div>
+      <div class="t3">{{ cv.filename or "Pasted text" }}</div>
+      <div class="meta">Uploaded {{ cv.uploaded_at|dmy(True) }}</div>
+    </div>
+    <div class="rowx">
+      <a class="btn" href="{{ ('/admin/users/%s/cv/download' % owner.id) if readonly else '/profile/cv/download' }}">Download</a>
+      {% if not readonly %}
+      <form method="post" action="/profile/cv/delete" data-confirm="Delete your core CV? Tailored CVs you already made are kept.">{{ csrf_field() }}<button class="btn btn--danger">Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+  <details class="more"><summary class="lnk">View the text</summary><div class="doc pre">{{ cv.text }}</div></details>
+  {% elif readonly %}
+  <p class="sub">{{ owner.first_name }} hasn't uploaded a CV yet.</p>
+  {% endif %}
+
+  {% if not readonly %}
+  <form method="post" action="/profile/cv" enctype="multipart/form-data" class="stack" {% if cv %}data-confirm="Replace your core CV with this one?"{% endif %}>
+    {{ csrf_field() }}
+    <h3 class="t3">{{ "Replace it" if cv else "Upload your CV to get started" }}</h3>
+    <div class="field"><label class="lab" for="cv_file">Choose a PDF (up to 2 MB)</label><input id="cv_file" name="cv_file" type="file" accept="application/pdf,.pdf" class="input" style="padding: 9px 12px"></div>
+    <details class="more"><summary class="lnk">Or paste the text instead</summary>
+      <div class="field"><label class="lab" for="cv_text">CV text</label><textarea id="cv_text" name="cv_text" class="input" style="min-height: 220px" maxlength="30000"></textarea></div>
+    </details>
+    <div><button class="btn btn--primary">{{ "Replace CV" if cv else "Save CV" }}</button></div>
+    {% if cv %}<p class="by">Replacing your core CV does not change the tailored CVs you have already made.</p>{% endif %}
   </form>
-  <a href="/onboarding" class="muted" style="text-decoration: underline">Start over with a different CV</a>
-</div>
+  {% endif %}
+</section>
+
+{% if not readonly %}
+<section class="info stack" aria-label="Privacy">
+  <strong>What happens to your CV</strong>
+  <span>It is stored in Job Buddy so it can be tailored for each job. It is sent to the AI service when you create a tailored CV. The admins can see it. You can delete it at any time.</span>
+</section>
+
+<section class="card stack" aria-label="Change password">
+  <h2 class="t2">Change password</h2>
+  <form method="post" action="/profile/password" class="stack" style="max-width: 420px">
+    {{ csrf_field() }}
+    <div class="field"><label class="lab" for="current">Current password</label><input id="current" name="current" type="password" class="input" autocomplete="current-password" required></div>
+    <div class="field"><label class="lab" for="new">New password (at least 10 characters)</label><input id="new" name="new" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
+    <div class="field"><label class="lab" for="again">New password again</label><input id="again" name="again" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
+    <div><button class="btn">Change password</button></div>
+  </form>
+  <p class="by">Forgotten it? Ask an admin for a new one.</p>
+</section>
+{% endif %}
 {% endblock %}

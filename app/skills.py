@@ -1,6 +1,6 @@
 """One agreed spelling per skill. Plain code, no AI.
 
-Every skill name from Gemma (CV, dream jobs, job tags, projects) goes through
+Every skill name from AI or an advert goes through
 `canonical()` before it is stored or compared. Without this, "React.js" on a CV and
 "React" in a job advert would not match and ranking would be silently wrong.
 """

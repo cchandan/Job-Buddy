@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, cv_badge, csrf_field with context %}
+{% set e = v.entry %}{% set job = v.job %}
+{% block title %}Review · {{ job.title }}{% endblock %}
+{% block content %}
+<a class="lnk" href="/admin/review">Back to Review CVs</a>
+<div class="head">
+  <div class="tight">
+    <h1 class="t">{{ owner.first_name }} · {{ job.title }}</h1>
+    <p class="sub">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}{% if tailored.sent_at %} · sent for review {{ tailored.sent_at|dmy }}{% endif %}</p>
+    <div class="rowx">{{ chip(v.chip) }}{{ cv_badge(tailored) }}</div>
+  </div>
+  <a class="btn" href="/tracker/{{ e.id }}/cv/print" target="_blank" rel="noopener">Open as a printable page</a>
+</div>
+
+<div class="cols3" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start">
+  <section class="stack" aria-label="Job description">
+    <h2 class="lab">Job description</h2>
+    <div class="doc" style="background: var(--ground)">
+      <h3 style="margin-top: 0">Deadline</h3>
+      <p>{% if v.deadline %}{{ v.deadline|dmy(True) }}{% if job.deadline_quote and not e.deadline_override %} <span class="quote">“{{ job.deadline_quote }}”</span>{% endif %}{% else %}Not known{% endif %}</p>
+      <h3>Visa sponsorship</h3>
+      <p>{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}{% if job.sponsorship_quote %} <span class="quote">“{{ job.sponsorship_quote }}”</span>{% endif %}</p>
+      {% if job.required_skills %}<h3>Skills asked for</h3><p>{{ job.required_skills|join(", ") }}</p>{% endif %}
+      <h3>Advert</h3>
+      <div class="pre">{{ job.description or "No description on this entry." }}</div>
+    </div>
+  </section>
+  <section class="stack" aria-label="Core CV">
+    <h2 class="lab">Core CV</h2>
+    <div class="doc pre" style="background: var(--ground)">{{ core.text if core else (owner.first_name ~ " has deleted their core CV.") }}</div>
+  </section>
+  <section class="stack" aria-label="Tailored CV">
+    <h2 class="lab">Tailored CV</h2>
+    <div class="doc pre" style="border: 2px solid var(--cobalt)">{{ tailored.text }}</div>
+  </section>
+</div>
+
+{% if tailored.status == "in_review" %}
+<form method="post" action="/admin/review/{{ e.id }}" class="card stack" aria-label="Decision">
+  {{ csrf_field() }}
+  <div class="field"><label class="lab" for="comment">Comment for {{ owner.first_name }} (needed when asking for changes)</label><textarea id="comment" name="comment" class="input" maxlength="2000" placeholder="What should change?"></textarea></div>
+  <div class="rowx" style="justify-content: flex-end">
+    <button class="btn" name="decision" value="changes">Request changes</button>
+    <button class="btn btn--primary" name="decision" value="approve">Approve</button>
+  </div>
+</form>
+{% else %}
+<div class="info">This CV is not waiting for review{% if tailored.reviewer %}: {{ tailored.reviewer.first_name }} {{ "approved it" if tailored.status == "approved" else "asked for changes" }} on {{ tailored.reviewed_at|dmy }}{% endif %}.{% if tailored.review_comment %} “{{ tailored.review_comment }}”{% endif %}</div>
+{% endif %}
+{% endblock %}

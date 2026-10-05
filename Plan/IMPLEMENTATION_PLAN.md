@@ -1,211 +1,253 @@
-# CareerOS Implementation Plan
+# Job Buddy Implementation Plan
 
-Companion to `spec.md` and `DESIGN.md`. Times add up to ~3h45, leaving ~15 min buffer.
+Companion to `spec.md` and `DESIGN.md`. This plan turns the existing CareerOS code into Job Buddy. It is a rebuild of a working app, not a fresh start: keep what works, delete what is gone, add what is new.
 
-## 0. Cut for today's hackathon demo
-The build finishes at 3 PM, so the demo MVP drops the items below. Everything else in this plan stands, and each cut item is finished after the hackathon. Where this section disagrees with a later one, this section wins for today.
+## 1. Tech stack
 
-- **Supabase:** run on SQLite. Visitor data resets when Render restarts, which is fine for a demo, and it is one setting (`DATABASE_URL`) to switch later.
-- **PDF upload:** paste the CV as text only.
-- **Separate mockup round:** the real pages are built straight away, with one round of feedback around 2:25 PM.
-- **Calendar and Network:** one plain static page each, no polish.
-- **Hardening:** friendly errors on the demo path only; call limits and the 7-day cleanup wait until later.
-- **Job count:** tag 30 jobs, not 100.
-
-## 1. Tech stack (and why, in plain English)
-
-| Choice | What it is | Why |
+| Choice | What it is | Status |
 |---|---|---|
-| **Python** for everything | One programming language | JobSpy is Python, so one language means one thing to learn |
-| **FastAPI + Jinja templates** | The web app; pages built on the server | One deployable thing; no separate frontend project |
-| **Tailwind (CDN)** | Ready-made styling classes | No build step |
-| **SQLAlchemy** | A layer that talks to the database | Same code works with SQLite on your laptop and Postgres online |
-| **SQLite (local/tests) → Postgres (production)** | The database | Chosen by one setting, `DATABASE_URL`. If it is not set, the app uses SQLite |
-| **Render** (free web service) | Hosts the app at a public URL, auto-deploys from GitHub | Simplest free host for a Python server |
-| **Supabase** (free Postgres) | Hosts the production database | Used only as a database; we don't use its login or other features |
-| **google-genai SDK** | Official library to call Gemma 4 via the Gemini API | One small wrapper file |
-| **Pydantic** (comes with FastAPI) | Checks that Gemma's JSON has the right shape | No extra dependency |
-| **JobSpy** | Open-source job fetcher | Ingestion only, installed on your laptop only |
-| **pypdf** | Reads text out of a PDF CV | Tiny, reliable |
-| **pytest** | Test runner | For the one TDD example |
+| **Python, FastAPI + Jinja templates** | The web app; pages built on the server | Kept |
+| **Existing CSS** (`app/static/app.css`) | The design system | Kept |
+| **SQLAlchemy** | Talks to the database | Kept |
+| **Postgres (Supabase)** | The production database | Kept, and now **required** |
+| **SQLite** | Database for tests and quick local work | Kept for those only |
+| **Alembic** | Applies database changes without losing data | **New** |
+| **Password hashing** (Python's built-in `hashlib.scrypt`) | Stores passwords safely | **New**, no extra dependency |
+| **Signed session cookie** (Starlette `SessionMiddleware`) | Remembers who is signed in | **New** |
+| **httpx** | Fetches a job page for add-by-link | **New** |
+| **google-genai SDK** | Calls Gemma 4 via the Gemini API | Kept for now |
+| **Pydantic** | Checks the shape of AI output | Kept |
+| **JobSpy** | Fetches job listings | Kept, laptop only |
+| **pypdf** | Reads text from a PDF CV | Kept |
+| **pytest** | Tests | Kept, more of them |
+| **Render** | Hosts the app | Kept |
 
-Not used: React/Next.js, a separate frontend, Docker, LangChain, vector databases, login/auth, background workers or queues.
+Not used: a separate JavaScript frontend, Docker, LangChain, vector databases, background workers or queues.
 
-**Two requirements files.** `requirements.txt` is what Render installs (no JobSpy). `requirements-ingest.txt` adds JobSpy for your laptop. JobSpy pulls in heavy libraries the server never needs, and the free Render service has little memory.
+**Why Postgres is now required.** CareerOS could run on SQLite on Render because losing visitor data on a restart did not matter. Job Buddy holds Trackers and CVs that must never be lost, and Render's free disk is wiped on every restart.
 
-**Why not Vercel?** Vercel is built for JavaScript frontends. Using it would mean building a second app (React) plus a JSON API plus cross-site settings, roughly 1.5-2 extra hours, for no benefit the user can see. Our server-rendered pages are still a real, public app.
+**Why Alembic.** CareerOS created its tables at startup and could throw the database away. Job Buddy's database holds real data, so every change to its shape must be applied without losing anything.
 
-**Check before the event:**
-- Current free-tier limits on Render and Supabase (free services sleep when idle; Render's free web service takes up to a minute to wake).
-- Use Supabase's **pooled** connection string for `DATABASE_URL`; the direct one often fails from Render.
-- The Gemma 4 model name on the Gemini API, its free-tier limits (requests and tokens per minute), and whether it supports JSON output mode. The design below works either way.
+**Tailored CV as PDF.** The tailored CV is shown on a clean print-styled page and saved with the browser's "Save as PDF". This needs no PDF library. If a real file download or a Word file is needed later, add a library then.
+
+**Two requirements files stay.** `requirements.txt` is what the server installs. `requirements-ingest.txt` adds JobSpy for admin laptops.
+
+**AI provider.** Gemma 4 through the Gemini API today; this will be reconsidered. `app/ai.py` (renamed from `gemma.py`) is the only file that knows which provider is used.
 
 ## 2. Architecture overview
-One web app, one database, one data file. Scraping and job tagging happen on your laptop and produce a file that is committed to the repo. The server never scrapes and never tags jobs.
 
 ```
- YOUR LAPTOP (before the demo)                      PRODUCTION (public URL)
- ┌───────────────────────────────┐                  ┌─────────┐  HTML  ┌──────────────────┐
- │ scripts/ingest_jobs.py        │                  │ Browser │ <────> │ FastAPI on Render│
- │ JobSpy → raw jobs → Gemma tags│                  └─────────┘        └───┬─────────┬────┘
- └──────────────┬────────────────┘                                        │         │
-                ▼                                     loads at startup    │         │ max 2 Gemma
-     data/jobs_tagged.json  ── git push ──────────▶  if jobs table empty  │         │ calls / visitor
-     (the single source of truth for jobs)                                ▼         ▼
-                                                     ┌─────────────────────┐   ┌──────────┐
-                                                     │ Postgres (Supabase) │   │ Gemma 4  │
-                                                     │  jobs (shared)      │   │ via      │
-                                                     │  visitors (private) │   │ Gemini   │
-                                                     └─────────────────────┘   └──────────┘
+ ADMIN'S LAPTOP (once a day)                         LIVE SITE
+ ┌──────────────────────────────┐                   ┌─────────┐ HTML ┌──────────────────┐
+ │ Job Buddy running locally    │                   │ Browser │ <──> │ FastAPI on Render│
+ │ Admin > Jobs sync            │                   └─────────┘      └───┬──────────┬───┘
+ │  1 Fetch (JobSpy)            │                                        │          │
+ │  2 Tag (AI + checks in code) │                                        │          │ tailor CV,
+ │  3 Sync ─────────────────────┼──────────┐                             │          │ read a link
+ └──────────────────────────────┘          │                             │          ▼
+                                           ▼                             ▼     ┌──────────┐
+                                  ┌──────────────────────────────────────────┐ │ AI       │
+                                  │ Postgres (Supabase), one database        │ │ provider │
+                                  │  jobs (shared) · people · tracker        │ └──────────┘
+                                  │  cvs · tailored cvs · sync history       │
+                                  └──────────────────────────────────────────┘
 ```
 
-Why the tagged file is the source of truth (instead of the laptop writing straight into the online database):
-- The laptop never needs the production database password.
-- Every deploy, and anyone who clones the open-source repo, gets a working demo with no scraping and no Gemma key.
-- There is one job-loading path, not two (live + fallback).
-- If the online database is wiped or swapped for SQLite, the jobs come back by themselves.
+One web app, one database. The same app runs in two places: on Render for everyone, and on an admin's laptop for the daily fetch. Both talk to the same database.
 
-**Database fallback.** Because jobs reload from the file, the app works identically on SQLite. If Supabase is not connected within 10 minutes in slice 0, leave `DATABASE_URL` unset on Render and carry on. Cost: visitor data resets when Render restarts the app (after ~15 idle minutes or a deploy). Acceptable for a demo; switch to Supabase later by setting one variable.
+## 3. How fetch and sync work (assumption A9)
+1. The admin starts Job Buddy on their laptop, with `DATABASE_URL` set to the production database and JobSpy installed.
+2. They sign in as usual and open Admin > Jobs sync.
+3. **Fetch and tag** writes to a staging table (`staged_jobs`), not to the Job Board. It saves as it goes, so it can be stopped and resumed.
+4. **Sync** copies staged jobs into `jobs`, matched by URL: new ones are added, existing ones updated. It records a row in `sync_runs` and empties the staging table.
+5. Users see the new jobs on their next page load.
 
-## 3. End-to-end data flow
+The app decides whether to show the Fetch button by checking whether JobSpy can be imported. On Render it cannot, so the button is replaced by a note.
+
+**Why this way:** it adds no extra moving parts. There is no upload step, no file to commit, and no second copy of the jobs to keep in step.
+
+**The cost:** the admin's laptop holds the production database password in its `.env`. For a family tool run by the two admins this is acceptable.
+
+**The alternative**, if that is not acceptable: the laptop keeps its own local database, and Sync sends the tagged jobs to a protected address on the live site with a secret token. The laptop then never holds the database password, at the cost of one more route and one more secret. Choose before slice 6.
+
+`data/jobs_tagged.json` is no longer the source of jobs. It is seed data: a database with no jobs at all starts with the jobs in this file, so the Job Board is not empty before the first sync.
+
+## 4. Sign-in and access
 
 ```
- AHEAD OF TIME (laptop)
-   JobSpy ──▶ data/jobs_raw.json ──▶ tagging.py (Gemma + checks in code) ──▶ data/jobs_tagged.json
-
- PER VISITOR (online)
-   CV + dream jobs + preferences
-        │  GEMMA CALL A (one call): extract CV skills, level, dream-job skills, summary
-        │  skills.py: clean every skill name to one canonical spelling
-        ▼
-   Profile saved against the session (raw CV text is thrown away)
-        │
-        │  ranking.py + gaps.py: computed fresh on every page view (fast, no AI, nothing stored)
-        ▼
-   ranked jobs + "why"  ·  top gaps
-        │  GEMMA CALL B (one call): explain top 5 gaps + suggest 1-3 projects; result saved
-        ▼
-   This Week / Jobs / Skill Gaps / Project Ideas pages
+ Browser ──▶ /login (username + password)
+                 │ too many recent failures?            ── yes ──▶ short lockout message
+                 │ account exists and password matches? ── no ───▶ same page, one plain error
+                 ▼ yes
+          set the session cookie ──▶ Home (user) or Admin home (admin)
 ```
 
-Only the two Gemma results are stored. Ranking and gaps are cheap rules over ~100 jobs, so they are recalculated on each page view; this means nothing can go stale when the visitor edits their profile.
+- Accounts live in the `people` table. There is no sign-up route; only an admin can create an account.
+- The app generates each password (long and random) and shows it to the admin once. Only a salted scrypt hash is stored.
+- "New password" replaces the hash and raises that person's session version, which signs them out everywhere.
+- The first admin is created with a one-off command, `python scripts/create_admin.py`. The same command rescues a locked-out admin.
+- Failed sign-ins are counted per username. After 5 in a row the account is locked for 10 minutes. The error never says whether the username exists, and a sign-in for a missing username takes as long as a real one.
+- The session cookie is signed with `SESSION_SECRET`, `HttpOnly`, `Secure`, `SameSite=Lax`. It holds the person's id and session version, nothing else.
+- Three guards, used by every route:
+  - `current_person(request)`: who is signed in, or redirect to sign-in.
+  - `require_admin(person)`: refuse with a friendly page if not an admin.
+  - `target_user(person, user_id)`: whose data this request is about. A user may only ever target themselves; an admin may target any user. Every Home, Tracker, Calendar, Profile and CV query goes through this, so access is decided in one place.
+- Forms that change data, including sign-in, are POSTs and carry a CSRF token.
 
-**If Gemma is down:**
-- Call A fails → code scans the CV text for known skill names (the list of skills seen in the tagged jobs). The profile has no narrative summary, but ranking and gaps still work.
-- Call B fails → gaps still show (they come from code) without the "why this matters" sentence; Project Ideas shows a friendly message and a retry button.
-- Jobs always show, because they were tagged ahead of time.
+## 5. Data
 
-## 4. Code layout
+| Table | Holds |
+|---|---|
+| `people` | id, username, name, role, password hash, session version, failed sign-in count and time, created, last sign-in, last Job Board visit |
+| `jobs` | The shared Job Board. id (hash of the URL), title, company, location, description, URL, salary, date posted, **deadline + quote**, sponsorship + quote, work mode + quote, seniority, industry, skills, first seen, last seen |
+| `staged_jobs` | Fetched and tagged jobs waiting for Sync. Same shape as `jobs` |
+| `tracker_entries` | One per user per job. person, job (if from the Board), own job details (if added by link or by hand), **source** (shortlisted / assigned / link / manual), **added by** (a person), **application status**, status history, **hand-set deadline**, notes, created |
+| `cvs` | One core CV per person: file name, file bytes, extracted text, uploaded date |
+| `tailored_cvs` | One per Tracker entry: text, **CV status**, reviewer, review comment, updated |
+| `sync_runs` | Who synced, when, counts |
+| `search_settings` | Keywords, locations, results per search |
+| `ai_usage` | Calls per day, for the daily limit |
+
+Notes:
+- A Tracker entry either points to a Board job or carries its own details. One helper returns "the job for this entry" in a single shape, so templates never need to know which.
+- The deadline shown is the hand-set one if present, otherwise the job's.
+- Listing status is not a column. It is worked out by `deadlines.listing_status(job, today)`.
+- CV files are stored in the database. They are small, there are few of them, and Render has no lasting disk.
+- A unique rule on (person, job) stops a job being shortlisted or assigned twice.
+- The old `visitors` and `gemma_usage` tables are dropped by the first migration.
+
+## 6. Code layout
 
 ```
 app/
-  main.py          # web routes (one plain function per page) + health check
-  db.py            # tables; reads DATABASE_URL; loads jobs_tagged.json at startup if jobs table is empty
-  sessions.py      # anonymous session cookie, "delete my data", removal of old visitor rows
-  gemma.py         # the ONLY file that talks to Gemma: JSON parsing, validation, retry, timeout, call limits
-  skills.py        # one spelling per skill ("ReactJS", "react.js" -> "React"); plain code, no AI
-  profile.py       # Gemma call A: CV + dream jobs -> profile (with the no-AI fallback)
-  ranking.py       # pure rules and maths, NO AI (the tested file)
-  gaps.py          # gap scoring (no AI)
-  projects.py      # Gemma call B: gap explanations + project recommendations
-  tagging.py       # job description -> tags, keyword safety net, quote check (used by the ingest script only)
-  templates/       # HTML pages (static placeholders for This Week actions / Calendar / Network)
+  main.py          # app setup, error pages, health check; mounts the route files
+  routes/
+    auth.py        # /login, /logout, change password
+    home.py        # user Home
+    board.py       # Job Board, shortlist
+    tracker.py     # Tracker, add by link, add by hand, status, deadline, notes
+    cv.py          # Profile, core CV, tailored CV, send for review
+    calendar.py    # Calendar
+    admin.py       # Admin home, accounts, view as user, assign, review, jobs sync
+  auth.py          # passwords, sign-in, lockout, session, the three guards (section 4)
+  summary.py       # what Home and Admin home show; pure code over the Tracker, CVs and jobs
+  db.py            # tables and the database connection
+  web.py           # shared by the route files: templates, page rendering, flash messages, formatters
+  tracking.py      # putting jobs into a Tracker (shortlist, assign, link, by hand) and changing status
+  ai.py            # the ONLY file that talks to the AI provider (was gemma.py)
+  tagging.py       # advert -> tags, keyword safety net, quote and date checks
+  skills.py        # one spelling per skill
+  deadlines.py     # listing status and deadline rules; pure code, no AI
+  linkfetch.py     # fetch a job page and pull out its text, safely
+  tailoring.py     # core CV + job -> tailored CV
+  ingest.py        # fetch (JobSpy), tag, stage, sync (moved from scripts/ingest_jobs.py)
+  cv_pdf.py        # PDF -> text
+  templates/
+  static/
+migrations/        # Alembic
 scripts/
-  ingest_jobs.py   # run on the laptop: fetch (JobSpy) -> tag -> write data/jobs_tagged.json
+  ingest_jobs.py   # thin command-line wrapper around app/ingest.py, kept as a backup to the Admin button
+  create_admin.py  # one-off: create the first admin, or rescue a locked-out one
 data/
-  jobs_raw.json        # raw listings as fetched
-  jobs_tagged.json     # tagged listings; what the app actually loads
-  sample_cv.txt, dream_jobs.json   # demo inputs
-tests/test_ranking.py
-requirements.txt          # server
-requirements-ingest.txt   # laptop only (adds JobSpy)
+  jobs_tagged.json # seed data for tests and a fresh local database
+tests/
 ```
 
-Rule: **AI lives in `gemma.py` and the files that call it; everything that decides lives in `ranking.py`, `gaps.py` and `skills.py`.**
+Rule: **AI reads and writes text; code decides.** Access, statuses, deadlines, de-duplication and sync are plain code with tests.
+
+### What happens to each existing file
+| File | Action |
+|---|---|
+| `app/gemma.py` | Rename to `ai.py`; drop the per-visitor limit, keep the daily one |
+| `app/tagging.py` | Keep; add deadline extraction and the date check; drop the software-jobs-only filter (admins now choose what is fetched); revisit tags when A2 is answered |
+| `app/skills.py`, `app/cv_pdf.py` | Keep |
+| `app/db.py` | Rewrite the tables (section 5); remove the 7-day cleanup. Tables are created at startup only on SQLite (tests and local play); Postgres changes only through migrations |
+| `app/main.py` | Split into `routes/`; remove onboarding, analyse, this-week, skill-gaps, projects, network |
+| `app/sessions.py` | Delete; replaced by `auth.py` |
+| `app/ranking.py`, `app/gaps.py`, `app/projects.py`, `app/profile.py` | Delete (assumption A1) |
+| Templates `landing`, `onboarding`, `this_week`, `skill_gaps`, `projects`, `network`, `deleted` | Delete |
+| Templates `base`, `_macros`, `jobs`, `calendar`, `profile`, `error` | Rework |
+| `app/static/landing.css` | Delete |
+| `scripts/ingest_jobs.py` | Move the logic to `app/ingest.py`; keep a thin wrapper |
+| `tests/test_ranking.py` | Delete; `tests/test_app.py` is rewritten slice by slice |
+| `render.yaml`, `.env.example` | Rename the service; add the new settings |
 
 ### Contracts between the pieces
-- `gemma.ask_json(prompt, schema, session_id=None)` → a validated object, or raises `GemmaUnavailable` / `GemmaLimitReached`. It does not rely on the API's JSON mode: it strips any code fences, parses the text, validates against the schema, retries once, and has a ~40 second timeout. `session_id=None` (the ingest script) skips the visitor limits.
-- `skills.canonical(name)` → the one agreed spelling. **Every** skill from Gemma (CV, dream jobs, job tags, projects) passes through it before being stored or compared. Without this, "React.js" on a CV and "React" in a job would not match and ranking would be silently wrong.
-- `ranking.rank(profile, jobs)` → list of `(job, score 0-100, blocked yes/no, block reason + quote, strong matches, missing skills)`, sorted with all unblocked jobs first, then by score. Blocked jobs therefore can never outrank a compatible job.
-- `gaps.top_gaps(profile, ranked_jobs)` → list of `(skill, priority, number of relevant jobs asking for it, total relevant jobs, in dream jobs yes/no)`. "Relevant" = not blocked and graduate/junior level.
+- `ai.ask_json(prompt, schema)` → a validated object, or raises `AIUnavailable` / `AILimitReached`. Strips code fences, parses, validates, retries once, has a timeout. `ai.ask_text(prompt)` does the same for the tailored CV.
+- `tagging.tag_job(job)` → tags, with every quote checked against the description and the deadline checked as a real date. Falls back to keyword tags when AI is unavailable.
+- `deadlines.listing_status(job, today)` → Open / Closing soon / Closed / Possibly closed.
+- `deadlines.effective_deadline(entry)` → the hand-set deadline, else the job's, else none.
+- `linkfetch.fetch_text(url)` → page text, or raises `LinkUnreadable`. Only `http` and `https`; refuses private and local network addresses; size and time limits; a fixed number of redirects.
+- `tailoring.tailor(cv_text, job)` → tailored CV text.
+- `summary.user_home(person, today)` and `summary.admin_home(today)` → the items each landing page shows. They read existing tables and store nothing.
+- `auth.new_password()` → a random password, returned once; `auth.hash_password` / `auth.check_password` use scrypt with a per-password salt.
+- `ingest.sync(db, admin)` → counts. Writes only `jobs`, `sync_runs` and `staged_jobs`.
 
-### Checks that code makes on Gemma's output (never trust, always verify)
-- A sponsorship or work-mode quote must appear word-for-word in the job description; if not, the tag becomes `unclear` and the quote is dropped.
-- Keyword safety net: if Gemma says `unclear` but the text contains a phrase like "no sponsorship", code overrides.
-- Project skills not in the visitor's gap list are removed; a project left with none is dropped.
-- All output is shown through Jinja's automatic escaping, so text from a CV or job advert cannot inject HTML.
+### Checks that code makes on AI output
+- A sponsorship, work-mode or deadline quote must appear word-for-word in the advert; if not, the tag becomes `unclear` or "Unknown" and the quote is dropped.
+- A deadline must parse as a real date. A date well in the past at fetch time is treated as "Unknown" rather than trusted.
+- Keyword safety net for sponsorship.
+- All output is shown through Jinja's automatic escaping, so text from a CV or advert cannot inject HTML.
+- The tailored CV cannot be fully checked by code. The safeguards are the prompt, the side-by-side view and optional review.
 
-## 5. Data (three small tables)
-- `jobs` (shared): id (hash of the URL, used for de-duplication), title, company, location, description, URL, salary, date posted, required skills, optional skills, sponsorship + quote, work mode + quote, seniority, industry.
-- `visitors` (one row per session): `session_id`, created date, CV skills, level, domains, summary, preferences, dream jobs (a list of up to 5: title, company, URL, skills), saved analysis (gap explanations + projects), Gemma call count. **No raw CV text and no pasted job descriptions are stored.**
-- `gemma_usage`: one row per day with the total number of visitor-triggered calls (the overall limit).
+## 7. Before building
+- Confirm the Supabase project and its pooled connection string; check that backups are on.
+- Decide the four usernames.
+- Answer the assumptions in `spec.md` section 13. A1, A2 and A9 change what gets built; the rest can be changed cheaply later.
 
-Lists are stored as JSON columns, which work the same on SQLite and Postgres. "Delete my data" deletes one `visitors` row and clears the cookie. Visitor rows older than 7 days are removed at startup. Editing the profile clears the saved analysis so it is regenerated.
+## 8. Build slices
+Each slice ends with something working on the live URL, tests passing, and a commit. Order matters: sign-in and the database come first because everything else stands on them.
 
-Placeholders (This Week actions, Calendar, Network): hard-coded sample content in templates, no tables.
+| # | Slice | Done when |
+|---|---|---|
+| 0 | **Rename and clear out.** Rename to Job Buddy (README, templates, `render.yaml`). Delete the removed features, their templates and tests. Add Alembic with a first migration to the new tables. | App starts; the Job Board lists the existing jobs; no dead links; tests pass |
+| 1 | **Sign-in and accounts.** `auth.py`, password hashing, lockout, the three guards, sign-in page, sign-out, the first-admin command, creating accounts and new passwords (a plain version of Admin home), change password, sidebar by role. | AC1 and AC2 pass as automated tests; all four people can sign in on the live URL |
+| 2 | **Job Board.** Deadline and listing status (`deadlines.py`, written test-first), filters, sort, job detail, Shortlist. | AC3, AC4 |
+| 3 | **Tracker.** Entries, "added by", application status with history, hand-set deadline, notes, Apply with the "Did you apply?" prompt, add by hand, remove. | AC6, AC7, AC8 |
+| 4 | **Add by link.** `linkfetch.py`, tagging one advert, the duplicate check, the fallback to the manual form. | AC5 |
+| 5 | **Calendar and Home.** Upcoming list, month view, "No deadline set"; then the user Home page (`summary.py`), built from the same data, including the getting-started state. | AC9, AC1a |
+| 6 | **Jobs sync.** Move ingestion into `app/ingest.py`, staging table, the Admin page with progress, Sync, history, search settings. Deadline added to tagging. | AC14, AC15 |
+| 7 | **Profile and core CV.** Upload, view, download, replace, delete, privacy note. | AC10 |
+| 8 | **Tailored CV.** `tailoring.py`, the two-pane editor, save, regenerate, print to PDF, blocked states. | AC11 |
+| 9 | **Admin.** The full Admin home (needs-you list, user cards, activity), view as user with the banner, assign a job, review queue with approve and request changes, remove account. | AC12, AC13, AC1a |
+| 10 | **Hardening.** Limits, CSRF, no-index, friendly errors everywhere, AI-down behaviour, phone layout check, removing a person and their data. | AC16, AC17, AC18 |
 
-### Session and request details
-- Cookie: a long random id (`secrets.token_urlsafe`), `HttpOnly`, `Secure`, `SameSite=Lax`. It is unguessable, so no signing key is needed.
-- Everything that changes data (onboarding, edit profile, delete) is a form POST, never a link.
-- Routes are plain `def` functions so a slow Gemma call does not freeze the app for other visitors.
-- Loading state: a few lines of inline script show an "Analysing your CV…" overlay when a slow form is submitted. No JavaScript framework.
-- The health check does not touch the database or Gemma, so the host still sees the app as alive if either is down.
+Slices 2 to 5 give a user a fully working Board, Tracker and Calendar on the existing 233 jobs, before any AI work. Slice 6 can move earlier if fresh jobs are needed sooner.
 
-## 6. Before the hackathon starts (not part of the 4 hours)
-Create accounts and keys so the clock isn't spent on sign-ups: GitHub (public repo), Render, Supabase (create a project, copy the pooled connection string), Gemini API key. Put keys in your local `.env` only (never in chat or the repo). Install Python 3.11+. Prepare one demo CV and 5 dream jobs.
+## 9. Tests
+Written first for the rules that must never break:
+- **Access:** a user requesting another user's Tracker, CV or Profile is refused; a user requesting any Admin route is refused; a signed-out request is redirected.
+- **Sign-in:** a wrong password is refused; the error is the same for a missing username; repeated failures lock out; a new password ends the old sessions; the stored value is a hash, never the password.
+- **Home:** every item on Home and Admin home matches the Tracker, CVs and jobs it came from.
+- **Listing status:** each of the four states, including the 7-day and 30-day edges.
+- **Deadlines:** a hand-set deadline wins and survives a sync.
+- **Sync:** adds and updates jobs; leaves every Tracker entry, status and CV untouched; matches by URL.
+- **Shortlist and assign:** doing either twice creates one entry.
+- **Quote and date checks:** a quote not in the advert is dropped; an impossible date becomes "Unknown".
+- **Link fetching:** local and private addresses are refused.
 
-## 7. Build slices (each ends with something working, then a git commit and push)
+Tests run on SQLite with a fake signed-in person and a fake AI, so they need no network and no keys.
 
-| # | Slice | Time | Done when |
-|---|---|---|---|
-| 0 | **Setup + deploy skeleton:** repo with MIT licence and `.gitignore`, hello-world FastAPI page + health check, connect Render to GitHub, set env vars on Render, connect to Supabase (10-minute limit, else SQLite), 3-line Gemma model test | 25m | Public URL shows the page; database connects; Gemma replies |
-| 1 | **Ingestion spike (go/no-go):** JobSpy fetch on your laptop into `data/jobs_raw.json` | 15m | ≥30 real listings in the file |
-| 2 | **Gemma wrapper + job tagging:** `gemma.py`, `skills.py`, `tagging.py`; start the tagging run (it can be stopped and resumed), write `jobs_tagged.json`; app loads it at startup and lists jobs on a plain page | 30m | ≥30 tagged jobs visible online; you hand-check 10 |
-| 3 | **Onboarding + profile + sessions:** CV upload/paste, up to 5 dream jobs, preferences, privacy note, anonymous session, Gemma call A, profile page | 35m | Two browsers see different profiles online |
-| 4 | **Ranking (TDD):** write the sponsorship test FIRST, watch it fail, then build scoring and hard constraints | 20m | Test passes; "why" text produced |
-| 5 | **Gaps + projects:** gap scoring in code; Gemma call B for explanations and 1-3 projects | 20m | Top gaps and projects generated |
-| 6 | **UI:** This Week, Jobs, Skill Gaps, Project Ideas styled from `DESIGN.md`; static placeholder content for Calendar and Network | 35m | Pages match the mockup roughly, online |
-| 7 | **Hardening + polish:** input limits, Gemma call limits, "Delete my data", friendly error/empty/loading states, visual polish | 30m | Nothing shows a raw error on the demo path |
-| 8 | **Spec review + demo prep:** review against `spec.md`, README, warm up the app, rehearse twice, screen-record a backup | 15m | Demo works from the public URL |
+## 10. Settings (environment variables)
+| Name | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string. Unset means SQLite, for tests and local play only |
+| `SESSION_SECRET` | Signs the session cookie |
+| `GEMINI_API_KEY`, `GEMMA_MODEL` | The AI provider, for now |
+| `AI_DAILY_LIMIT` | Daily cap on AI calls |
 
-**Why tagging comes before onboarding:** tagging ~100 jobs is slow (rate limits), so it should be running in a terminal while onboarding is being built. It also produces the list of known skills that the profile step uses.
+## 11. Production basics
+- AI failure or bad JSON: retry once, then fall back; never crash.
+- The health check touches neither the database nor the AI.
+- Database changes go through Alembic migrations, run on deploy.
+- Backups: confirm Supabase's are on; take a manual export before any migration that changes existing tables.
+- Logs never contain CV text, tokens or keys.
+- Free-tier sleep: the first page load after a quiet spell is slow. Acceptable for four people; move to a paid instance if it annoys.
 
-**Tagging must be resumable:** the script saves each job's tags as it goes and skips jobs already tagged, so a rate-limit error or a closed laptop loses nothing. Start with 30 jobs; add more if time allows.
-
-**Deploy early, deploy often:** every push to GitHub auto-deploys, so each slice is tested online, not just locally.
-
-**Ingestion go/no-go (slice 1):** if JobSpy has not returned usable jobs within ~15 minutes, stop fighting it. Use a realistic hand-built `jobs_raw.json` of 30+ listings, keep the JobSpy code path in the repo, and move on.
-
-Slices 1 and 2 need no design, so they can be built while `DESIGN.md` is still being turned into mockups. Slice 6 needs the design.
-
-## 8. The one TDD example
-Test first, in `tests/test_ranking.py`: *a user who needs sponsorship, one job tagged `no_sponsorship` with a higher skill match, one tagged `sponsors` → the sponsoring job ranks higher and the other is flagged.* No AI or database is involved, so it runs instantly. Workflow: write test → run it, see red → build `ranking.py` until green.
-
-## 9. Production basics (slice 7 checklist)
-- Gemma failure or bad JSON: retry once, then the fallbacks in section 3; never crash.
-- No API key or no network: friendly message; pre-tagged jobs still show.
-- Limits: ~2 MB upload, PDF/text only, capped text lengths, max 5 dream jobs. Gemma: a small number of calls per visitor (enough for 2 calls plus a few retries/edits) and a daily total across all visitors. The daily total is the real protection, since a visitor can clear their cookie.
-- Privacy: note on onboarding, raw CV text never stored or logged, "Delete my data", old visitor rows removed after 7 days, secrets only in environment variables.
-- Health-check route; app wakes cleanly after sleeping (jobs reload from the file if needed).
-- Empty states for every page; loading overlay on the two slow steps.
-
-## 10. How to use Claude Code to save tokens and learn
-- Keep `CLAUDE.md` short; it is read automatically.
-- One slice per session; `/clear` between slices; commit after each.
-- Plan mode only for slices 2 and 4. Others, just ask directly.
-- **Subagents (selective):** one reviewer at slice 8 that compares the app to `spec.md` and lists gaps. Optionally one to hand-check tags in slice 2.
-- Skills/Superpowers: skip.
-- Don't paste whole job datasets into chat; point Claude at the files.
-
-## 11. Gemma usage per slice
-Slice 2: tag jobs (core, offline, one call per job) · Slice 3: call A (CV + dream jobs → profile) · Slice 5: call B (gap explanations + projects). All via `gemma.py`.
-
-Per visitor that is **two calls**, not one per dream job and one per gap. Fewer calls means a faster onboarding, simpler limits, and less chance of hitting the free-tier per-minute cap during the demo.
-
-## 12. Risks and cut-list
-Biggest technical risks: **ingestion** (early spike), **deployment surprises** (deploy in slice 0), **Gemma rate limits during tagging** (resumable script, start early), then the Gemma model name/access (slice 0).
-If behind schedule, cut in this order: (1) placeholder polish, (2) project milestone detail, (3) PDF upload (paste text only), (4) Supabase (run on SQLite), (5) styling polish. Never cut: tagging, skill-name cleaning, the ranking test, deployment, session isolation, "Delete my data", error handling on the demo path.
-Stretch only if finished early: screenshot-a-job-ad, local Gemma via Ollama.
-
-## 13. Final-hour checklist
-README (what it does, live URL, "JobSpy fetches, Gemma 4 understands, plain code decides", run and deploy steps) · MIT licence · no keys committed · public GitHub repo · app warmed up and demo rehearsed twice · backup screen recording · submit on MLH.
+## 12. Risks
+The biggest technical risks, in order:
+1. **Access control mistakes.** One guard, used everywhere, tested first (slice 1).
+2. **Migrating a live database.** Alembic from slice 0; export before risky changes.
+3. **Add by link.** Many job pages block robots or need JavaScript. The manual fallback is part of the feature, not an afterthought.
+4. **Fetch and sync from a laptop.** Depends on the laptop being set up correctly; the steps go in the README and the command-line script stays as a backup.
+5. **Tailored CV quality.** Judged by the family, not by tests; expect to adjust the prompt after real use.

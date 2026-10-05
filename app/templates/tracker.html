@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import entry_card, chip, csrf_field, job_fields with context %}
+{% block title %}{{ (owner.first_name ~ "'s Tracker") if readonly else "Tracker" }}{% endblock %}
+{% block content %}
+{% set add = request.query_params.get("add", "") %}
+<div class="head">
+  <div>
+    <h1 class="t">{{ (owner.first_name ~ "'s Tracker") if readonly else "Tracker" }}</h1>
+    <p class="sub">{{ total }} job{{ '' if total == 1 else 's' }}</p>
+  </div>
+  {% if not readonly %}
+  <a class="btn btn--primary" href="/tracker/new">Add job by hand</a>
+  {% endif %}
+</div>
+
+{% if not readonly %}
+<form method="post" action="/tracker/add-link" class="card rowx" style="align-items: flex-end; gap: 12px" data-loading="Reading the advert…">
+  {{ csrf_field() }}
+  <div class="field" style="flex: 3 1 280px"><label class="lab" for="url">Add a job from a link</label><input id="url" name="url" type="url" class="input" placeholder="Paste the link to the advert" required></div>
+  <button class="btn">Add from link</button>
+</form>
+{% else %}
+<section class="card stack" aria-label="Assign a job" style="border: 2px solid var(--cobalt)">
+  <h2 class="t2">Assign a job to {{ owner.first_name }}</h2>
+  <p class="by">It will appear in {{ owner.first_name }}'s Tracker as “Assigned by {{ person.first_name }}”.</p>
+  <form method="get" action="{{ base }}" class="rowx" style="align-items: flex-end; gap: 12px">
+    <div class="field" style="flex: 3 1 280px"><label class="lab" for="aq">Find a job on the Job Board</label><input id="aq" name="q" type="search" class="input" placeholder="Title or company" value="{{ q|default('') }}"></div>
+    <button class="btn">Search</button>
+  </form>
+  {% for f in found|default([]) %}
+  <div class="doc rowx" style="justify-content: space-between">
+    <div class="grow"><div class="t3">{{ f.job.title }}</div><div class="meta">{{ f.job.company }}{% if f.job.location %} · {{ f.job.location }}{% endif %}</div></div>
+    <div class="rowx">{{ chip(f.chip) }}
+      {% if f.has %}<span class="badge b-none">Already in their Tracker</span>{% else %}
+      <form method="post" action="/admin/users/{{ owner.id }}/assign">{{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ f.job.id }}"><button class="btn btn--primary">Assign</button></form>{% endif %}
+    </div>
+  </div>
+  {% else %}{% if q|default('') %}<p class="sub">No open jobs match “{{ q }}”.</p>{% endif %}
+  {% endfor %}
+  <details class="more" {{ 'open' if add == 'link' }}>
+    <summary class="lnk">Or paste a link</summary>
+    <form method="post" action="/admin/users/{{ owner.id }}/assign" class="rowx" style="align-items: flex-end; gap: 12px" data-loading="Reading the advert…">
+      {{ csrf_field() }}<input type="hidden" name="how" value="link">
+      <div class="field" style="flex: 3 1 280px"><label class="lab" for="aurl">Link to the advert</label><input id="aurl" name="url" type="url" class="input" required></div>
+      <button class="btn btn--primary">Assign from link</button>
+    </form>
+  </details>
+  <details class="more" {{ 'open' if add == 'manual' }}>
+    <summary class="lnk">Or enter the job by hand</summary>
+    <form method="post" action="/admin/users/{{ owner.id }}/assign" class="stack">
+      {{ csrf_field() }}<input type="hidden" name="how" value="manual">
+      {{ job_fields({}, "", "") }}
+      <div><button class="btn btn--primary">Assign this job</button></div>
+    </form>
+  </details>
+</section>
+{% endif %}
+
+<div class="tabs" role="group" aria-label="Filter by status">
+  {% for key, label in tabs %}
+  <a class="tab {{ 'on' if status == key }}" href="{{ base }}{{ ('?status=' ~ key) if key }}">{{ label }} <span>{{ counts[key] }}</span></a>
+  {% endfor %}
+  <a class="tab right {{ 'on' if sort == 'added' }}" href="{{ base }}?{{ ('status=' ~ status ~ '&') if status }}sort={{ '' if sort == 'added' else 'added' }}">{{ "Sorted by date added" if sort == "added" else "Sorted by deadline" }}</a>
+</div>
+
+<div class="stack">
+  {% for v in views %}
+  {{ entry_card(v, person, readonly, base ~ (('?status=' ~ status) if status else ''), viewing) }}
+  {% else %}
+  <div class="card empty">
+    {% if total == 0 %}
+      <h2 class="t2">Nothing here yet</h2>
+      {% if readonly %}<p class="sub">{{ owner.first_name }} hasn't shortlisted anything. Assign a job above to get them started.</p>
+      {% else %}<p class="sub">Shortlist jobs from the Job Board, or add one with a link.</p><a class="btn btn--primary" href="/board">Open the Job Board</a>{% endif %}
+    {% else %}
+      <h2 class="t2">No jobs with that status</h2><a class="btn" href="{{ base }}">Show all</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% if readonly %}<p class="by">Admins can view, assign and review. Status, notes and CV text stay with {{ owner.first_name }}.</p>{% endif %}
+{% endblock %}

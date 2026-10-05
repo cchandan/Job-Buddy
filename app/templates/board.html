@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, status_badge, listing_badge, meta, tags, csrf_field with context %}
+{% block title %}Job Board{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Job Board</h1>
+    <p class="sub">{{ total }} job{{ '' if total == 1 else 's' }} ·
+      {% if last_sync %}Last updated {{ last_sync.at|dmy }}{% if last_sync.person %} by {{ last_sync.person.first_name }}{% endif %}{% else %}Not synced yet{% endif %}</p>
+  </div>
+</div>
+{% if board_age is not none and board_age > 3 %}
+<div class="notice"><span>The Job Board was last updated {{ board_age }} days ago, so some jobs may be out of date.{% if person.is_admin %} <a href="/admin/sync">Fetch today's jobs</a>{% endif %}</span></div>
+{% endif %}
+
+<form method="get" action="/board" class="card rowx" style="align-items: flex-end; gap: 12px">
+  <div class="field" style="flex: 2 1 220px"><label class="lab" for="q">Search</label><input id="q" name="q" type="search" class="input" placeholder="Title or company" value="{{ filters.q }}"></div>
+  <div class="field"><label class="lab" for="status">Listing status</label>
+    <select id="status" name="status" class="input">{% for value, label in (("open", "Open"), ("closing_soon", "Closing soon"), ("possibly_closed", "Possibly closed"), ("closed", "Closed"), ("all", "All, including closed")) %}<option value="{{ value }}" {{ 'selected' if filters.status == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="lab" for="location">Location</label><input id="location" name="location" class="input" placeholder="Anywhere" value="{{ filters.location }}"></div>
+  <div class="field"><label class="lab" for="work_mode">Work mode</label>
+    <select id="work_mode" name="work_mode" class="input">{% for value, label in (("", "Any"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "Onsite")) %}<option value="{{ value }}" {{ 'selected' if filters.work_mode == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="lab" for="sponsorship">Sponsorship</label>
+    <select id="sponsorship" name="sponsorship" class="input">{% for value, label in (("", "Any"), ("sponsors", "Sponsors visas"), ("unclear", "Unclear"), ("no_sponsorship", "No sponsorship")) %}<option value="{{ value }}" {{ 'selected' if filters.sponsorship == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="lab" for="seniority">Level</label>
+    <select id="seniority" name="seniority" class="input">{% for value, label in (("", "Any"), ("graduate", "Graduate"), ("junior", "Junior"), ("mid", "Mid"), ("senior", "Senior")) %}<option value="{{ value }}" {{ 'selected' if filters.seniority == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="lab" for="sort">Sort by</label>
+    <select id="sort" name="sort" class="input">{% for value, label in (("deadline", "Deadline, soonest"), ("newest", "Newest"), ("company", "Company")) %}<option value="{{ value }}" {{ 'selected' if filters.sort == value }}>{{ label }}</option>{% endfor %}</select></div>
+  <button class="btn btn--primary">Show</button>
+</form>
+
+<div class="stack">
+  {% for r in rows %}
+  {% set job = r.job %}
+  <article class="card job {{ 'dim' if r.listing == 'closed' }}">
+    <div class="jmain">
+      <h2 class="jt"><a href="/board/{{ job.id }}">{{ job.title }}</a></h2>
+      <div class="meta">{{ meta(job, mode=False) }}</div>
+      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}</div>
+      {% if job.sponsorship_quote and job.sponsorship != "unclear" %}<div class="quote">“{{ job.sponsorship_quote|truncate(180) }}”</div>{% endif %}
+    </div>
+    <div class="jside" style="align-items: flex-end; justify-content: space-between">
+      <div class="by">First seen {{ job.first_seen|dmy }}</div>
+      {% if person.is_admin %}
+        {% if users %}
+        <form method="post" action="/admin/assign" class="rowx">
+          {{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="next" value="/board{{ '?' + query if query }}">
+          <label class="lab" for="to-{{ job.id }}" style="position: absolute; left: -9999px">Assign to</label>
+          <select id="to-{{ job.id }}" name="user" class="input" style="width: auto">{% for u in users %}<option value="{{ u.id }}">{{ u.first_name }}</option>{% endfor %}</select>
+          <button class="btn btn--primary">Assign</button>
+        </form>
+        {% endif %}
+      {% elif r.entry %}
+        <div class="rowx">{{ status_badge(r.entry.status) }}<a class="btn" href="/tracker/{{ r.entry.id }}">In your Tracker</a></div>
+      {% else %}
+        <form method="post" action="/board/{{ job.id }}/shortlist">{{ csrf_field() }}<input type="hidden" name="next" value="/board{{ '?' + query if query }}"><button class="btn btn--primary">Shortlist</button></form>
+      {% endif %}
+    </div>
+  </article>
+  {% else %}
+  <div class="card empty">
+    {% if total == 0 and not filters.q and not filters.location and filters.status == "open" %}
+    <h2 class="t2">No jobs yet</h2><p class="sub">An admin needs to run the first sync.</p>
+    {% else %}
+    <h2 class="t2">No jobs match those filters</h2><a class="btn" href="/board">Clear filters</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% if pages > 1 %}
+<nav class="rowx" aria-label="Pages" style="justify-content: center">
+  {% if page > 1 %}<a class="btn" href="/board?{{ query }}&page={{ page - 1 }}">Previous</a>{% endif %}
+  <span class="sub">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="/board?{{ query }}&page={{ page + 1 }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -72,7 +72,7 @@ def job_dict(job, usernames=None):
     return out
 
 
-def publish(database, run):
+def publish(database, run, stop=lambda: False):
     """manifest -> only the rows the site lacks -> who is still listed -> who closed. Returns counts."""
     if not wake():
         raise PushError("the live site did not wake up (still answering errors after about 2 minutes)")
@@ -83,6 +83,9 @@ def publish(database, run):
     sent = 0
     ordered = [by_id[i] for i in need if i in by_id]
     for i in range(0, len(ordered), BATCH):
+        if stop():
+            run.event("push", f"Publishing stopped after {sent} jobs. The rest go next time; nothing is lost.", level="warn")
+            return {"sent": sent, "seen": 0, "closed": 0, "stopped": True}
         _post("jobs", {"jobs": [job_dict(j, usernames) for j in ordered[i:i + BATCH]]})
         sent += len(ordered[i:i + BATCH])
     recent = db.utcnow() - timedelta(hours=6)

@@ -526,7 +526,7 @@ def test_a_search_is_only_marked_done_after_its_jobs_are_saved(lab, monkeypatch)
 def test_stop_keeps_what_was_saved_and_still_publishes(lab, monkeypatch):
     published = []
     monkeypatch.setattr(push, "configured", lambda: True)
-    monkeypatch.setattr(push, "publish", lambda s, run: published.append(1) or {})
+    monkeypatch.setattr(push, "publish", lambda s, run, stop=None: published.append(1) or {})
     monkeypatch.setattr(push, "send_log", lambda run_id: None)
     state = dict(ingest.STATE, running=True, stop=False)
 
@@ -543,7 +543,7 @@ def test_stop_keeps_what_was_saved_and_still_publishes(lab, monkeypatch):
 def test_a_crash_part_way_keeps_earlier_searches_and_still_publishes(lab, monkeypatch):
     published = []
     monkeypatch.setattr(push, "configured", lambda: True)
-    monkeypatch.setattr(push, "publish", lambda s, run: published.append(1) or {})
+    monkeypatch.setattr(push, "publish", lambda s, run, stop=None: published.append(1) or {})
     monkeypatch.setattr(push, "send_log", lambda run_id: None)
     set_profile("wife", keywords="a, b")
     calls = []
@@ -737,3 +737,25 @@ def test_push_waits_for_a_sleeping_site_and_says_what_it_answered(monkeypatch):
     monkeypatch.setattr(push.httpx, "post", lambda *a, **k: R(401))
     with pytest.raises(PermissionError, match="INGEST_TOKEN"):
         push._post("manifest", {})
+
+
+def test_stop_during_publishing_ends_the_upload_cleanly(lab, monkeypatch):
+    monkeypatch.setenv("INGEST_URL", "https://live.example")
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    monkeypatch.setattr(push, "wake", lambda: True)
+    monkeypatch.setattr(push, "BATCH", 1)
+    sent = []
+
+    def post(path, payload):
+        if path == "manifest":
+            return {"need": list(payload["hashes"])}
+        if path == "jobs":
+            sent.append(1)
+            state_ref["stop_publish"] = True  # the admin presses Stop after the first batch
+        return {}
+    monkeypatch.setattr(push, "_post", post)
+    lab.jobs["indeed"] = [raw(i) for i in range(3)]
+    state_ref = dict(ingest.STATE, running=True, stop=False)
+    monkeypatch.setattr(push, "send_log", lambda run_id: None)
+    ingest.refresh(None, state_ref, check_pages=False)
+    assert len(sent) == 1  # it stopped after the first batch, not all three

@@ -27,7 +27,7 @@ DEEPEST = {"linkedin": 100, "glassdoor": 100}  # these load every advert page, s
 BREAKER = 2  # a source that fails this many searches in a row is skipped for the rest of the run
 
 STATE = {"running": False, "stop": False, "phase": "", "fetched": 0, "tagged": 0, "total": 0, "message": "", "run_id": None,
-         "plan": {}, "now": "", "started": 0.0, "new": 0, "seen": 0, "notes": []}
+         "plan": {}, "now": "", "started": 0.0, "new": 0, "seen": 0, "notes": [], "stop_publish": False}
 _lock = threading.Lock()
 
 
@@ -313,7 +313,7 @@ def _plain(e):
 def refresh(person_id=None, state=STATE, check_pages=True):
     """The whole job. Returns the run's status: complete / partial / failed. Whatever was fetched is already saved, so even a
     crash or a Stop still publishes what there is and writes the log."""
-    state.update(phase="Planning", message="", fetched=0, tagged=0, total=0, plan={}, now="", started=time.time(), new=0, seen=0, notes=[])
+    state.update(stop_publish=False, phase="Planning", message="", fetched=0, tagged=0, total=0, plan={}, now="", started=time.time(), new=0, seen=0, notes=[])
     run = runlog.Run(hook=lambda level, message: state["notes"].append(message))
     state["run_id"] = run.id
     ai.reset_backends()
@@ -330,7 +330,7 @@ def refresh(person_id=None, state=STATE, check_pages=True):
         state["phase"] = "Publishing"
         try:
             with db.SessionLocal() as s:
-                pushed = push.publish(s, run)
+                pushed = push.publish(s, run, stop=lambda: state.get("stop_publish"))
         except Exception as e:
             run.event("push", f"Publishing to the online site failed ({_plain(e)}). Your jobs are safe here; press Refresh to try again.",
                       level="error")
@@ -479,6 +479,8 @@ def start(person_id=None):
 
 
 def stop():
+    if STATE["phase"] == "Publishing":
+        STATE["stop_publish"] = True  # a second Stop, while publishing, ends the upload
     STATE["stop"] = True
 
 

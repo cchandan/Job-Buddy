@@ -232,7 +232,7 @@ def sync_page(request: Request, database=Depends(auth.get_db), person=Depends(au
     history = database.query(db.SyncRun).order_by(db.SyncRun.at.desc()).limit(10).all()
     picked, skipped = sources.plan()
     return web.page(request, "admin_sync.html", person, "sync", profiles=ingest.profiles(database),
-                    can_fetch=bool(picked), picked=picked, skipped=skipped, backends=ai.tagging_backends(),
+                    can_fetch=bool(picked), picked=picked, skipped=skipped, backends=[ai.backend_label(b) for b in ai.tagging_backends()],
                     state=dict(ingest.STATE), prog=ingest.progress(), runs=runlog.recent(database, 5), notes=runlog.attention(database, web.today()),
                     history=history, today_=web.today())
 

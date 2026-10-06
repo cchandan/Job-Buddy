@@ -55,3 +55,47 @@ def test_keyword_safety_net_when_ai_is_unsure_or_down():
     assert out["tag_source"] == "keywords" and "Python" in out["required_skills"]
 
 
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("title, description, expected", [
+    ("Senior Business Analyst", "", "senior"), ("Business Analyst", "", ""), ("Business Analyst", "Founded 25 years ago, we are growing.", ""),
+    ("Platform Engineer", "You will have 3+ years of experience with AWS.", "mid"),
+    ("Platform Engineer", "Experience: 8 years in platform work.", "senior"),
+    ("Data Analyst", "1-2 years experience preferred.", "junior"),
+    ("Project Manager", "", "mid"), ("Head of Data", "", "senior"), ("Associate Software Developer", "", "junior"),
+    ("Graduate Software Engineer", "", "graduate"), ("2027 Software Engineer Programme", "", "graduate"),
+    ("Programme Manager", "", "mid"), ("Software Engineer - Entry Level", "", "graduate"),
+])
+def test_seniority_comes_from_the_title_or_the_experience_asked_for(title, description, expected):
+    assert tagging.keyword_seniority(title, description) == expected
+
+
+def test_a_refusal_to_sponsor_is_never_read_as_an_offer():
+    text = ("The salary for this role does not meet the minimum threshold required under the Immigration Rules for "
+            "Skilled Worker visa sponsorship.")
+    assert tagging.keyword_sponsorship(text)[0] == "no_sponsorship"
+    assert tagging.keyword_sponsorship("We offer Skilled Worker visa sponsorship for this role.")[0] == "sponsors"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Benefits: on-site parking and a gym.", "unclear"), ("On site training is provided.", "unclear"),
+    ("Free on-site healthcare for staff.", "unclear"), ("Fully on-site role in Leeds.", "onsite"),
+    ("Experience with hybrid cloud environments.", "unclear"), ("This role is hybrid, 3 days in the office.", "hybrid"),
+])
+def test_work_mode_ignores_perks_and_technology_words(text, expected):
+    assert tagging.keyword_work_mode(text)[0] == expected
+
+
+def test_improving_the_rules_makes_old_tags_get_redone():
+    from app import sources
+    raw = {"title": "Role", "company": "Co", "location": "Leeds", "description": "x " * 100}
+    before = sources.content_hash(raw)
+    old = sources.TAGGER_VERSION
+    try:
+        sources.TAGGER_VERSION = "999"
+        assert sources.content_hash(raw) != before
+    finally:
+        sources.TAGGER_VERSION = old

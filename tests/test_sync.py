@@ -616,3 +616,79 @@ def test_right_to_work_is_not_ranked_as_a_refusal_for_someone_who_needs_sponsors
         s.commit()
     page = signed_in("brother").get("/board").text
     assert page.index("Engineer A") < page.index("Engineer B") and page.index("Engineer C") < page.index("Engineer B")
+
+
+def test_codex_runs_the_cheapest_model_and_any_cli_failure_switches_it_off(monkeypatch):
+    ai.reset_backends()
+    seen = []
+    monkeypatch.setattr(ai.shutil, "which", lambda name: "/bin/" + name if name == "codex" else None)
+    monkeypatch.setattr(ai, "_ollama_up", lambda: False)
+
+    class Fail:
+        returncode, stdout, stderr = 1, "", "model not found for your plan"
+    monkeypatch.setattr(ai.subprocess, "run", lambda cmd, **k: seen.append(cmd) or Fail())
+    assert ai.tagging_backends() == ["codex"]
+    with pytest.raises(ai.AIUnavailable):
+        ai.ask_json("x", ingest.tagging.BatchOut, backends=("codex",))
+    cmd = seen[0]
+    assert cmd[:3] == ["codex", "exec", "--skip-git-repo-check"] and cmd[cmd.index("-m") + 1] == ai.CODEX_MODEL == "gpt-6-luna"
+    assert "--ephemeral" in cmd and "read-only" in cmd and 'model_reasoning_effort="low"' in cmd
+    assert ai.tagging_backends() == []  # not retried on every batch
+    ai.reset_backends()
+
+
+def test_the_admin_can_filter_the_board_by_who_a_job_was_searched_for(people):
+    make_job("a", title="For wife only")
+    make_job("b", title="For brother only")
+    with db.SessionLocal() as s:
+        s.get(db.Job, "a").matched = [people["wife"]]
+        s.get(db.Job, "b").matched = [people["brother"]]
+        s.commit()
+    dad = signed_in("dad")
+    both = dad.get("/board").text
+    assert "For wife only" in both and "For brother only" in both and "For Wife" in both
+    only = dad.get(f"/board?who={people['wife']}").text
+    assert "For wife only" in only and "For brother only" not in only
+
+
+def test_admin_board_search_accepts_everyone_filter(people):
+    make_job("a", title="Graduate Developer")
+
+    response = signed_in("dad").get("/board?who=&q=Graduate")
+
+    assert response.status_code == 200
+    assert "Graduate Developer" in response.text
+
+
+def test_a_job_whose_page_is_still_open_is_not_left_to_drift_to_possibly_closed(people):
+    _old_job("openone", "https://c.example/open", days=40)
+    with db.SessionLocal() as s:
+        s.get(db.Job, "openone").last_seen = db.utcnow() - ingest.timedelta(days=40)
+        s.commit()
+        liveness.check(s, pause=(0, 0), fetch=lambda url: (200, url, "Apply now"))
+        from app import deadlines
+        assert deadlines.listing_status(s.get(db.Job, "openone"), date.today()) == "open"
+
+
+def test_the_admin_page_names_the_tagging_models(lab, monkeypatch):
+    monkeypatch.setattr(ai, "tagging_backends", lambda: ["claude", "codex"])
+    page = signed_in("dad").get("/admin/sync").text
+    assert "claude (haiku)" in page and "codex (gpt-6-luna)" in page
+
+
+def test_a_completed_refresh_clearly_names_the_exact_model_used(lab, monkeypatch):
+    lab.jobs["indeed"] = [raw(1)]
+    monkeypatch.setattr(ai, "tagging_backends", lambda: ["codex"])
+    real_tag_batch = ingest.tagging.tag_batch
+
+    def tagged_with_codex(jobs, **kwargs):
+        tags, stats = real_tag_batch(jobs, use_ai=False)
+        stats.update(ai_calls=1, backends=["codex"])
+        return tags, stats
+
+    monkeypatch.setattr(ingest.tagging, "tag_batch", tagged_with_codex)
+    refresh()
+
+    page = signed_in("dad").get("/admin/sync").text
+    assert "Model used:" in page
+    assert "codex (gpt-6-luna)" in page

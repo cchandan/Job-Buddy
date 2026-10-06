@@ -56,7 +56,8 @@
         <td>{% if info.failed %}Failed{% elif info.failed_searches %}Partly failed{% else %}OK{% endif %}</td></tr>{% endfor %}</tbody>
     </table></div>
     {% endif %}
-    {% if sm.ai_calls is defined %}<p class="by">AI: {{ sm.ai_calls }} call{{ '' if sm.ai_calls == 1 else 's' }}, avoided for {{ sm.ai_avoided }} job{{ '' if sm.ai_avoided == 1 else 's' }}{% if sm.backends %} via {{ sm.backends|join(", ") }}{% endif %}{% if sm.keyword_only %} · {{ sm.keyword_only }} tagged by keywords only{% endif %}.</p>{% endif %}
+    {% if sm.backends %}<p><strong>{{ "Model" if sm.backends|length == 1 else "Models" }} used:</strong> <span class="tag">{{ sm.backends|join(", ") }}</span></p>{% endif %}
+    {% if sm.ai_calls is defined %}<p class="by">AI: {{ sm.ai_calls }} call{{ '' if sm.ai_calls == 1 else 's' }}, avoided for {{ sm.ai_avoided }} job{{ '' if sm.ai_avoided == 1 else 's' }}{% if sm.keyword_only %} · {{ sm.keyword_only }} tagged by keywords only{% endif %}.</p>{% endif %}
     <ul class="tight" style="list-style: none; padding: 0">
       {% for e in events %}<li class="by" style="{% if e.level == 'error' %}color: #b4230f{% elif e.level == 'warn' %}color: #8a5a00{% endif %}"><span class="tag">{{ e.stage }}</span> {{ e.message }}</li>{% endfor %}
     </ul>

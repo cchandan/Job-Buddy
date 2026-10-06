@@ -1,4 +1,5 @@
-"""The Tracker: four ways in, statuses with history, deadlines, Apply, and the Calendar built from it."""
+"""The Tracker: three ways in, statuses with history, deadlines, Apply, and the Calendar built from it."""
+import json
 from datetime import date
 
 from app import ai, db
@@ -188,3 +189,48 @@ def test_a_bad_or_missing_pdf_is_explained(people):
     token = wife.token()
     assert "isn&#39;t a PDF" in wife.client.post("/tracker/new/read", data={"csrf": token}, files={"file": ("x.pdf", b"hello", "application/pdf")}).text
     assert "Please choose a PDF" in wife.client.post("/tracker/new/read", data={"csrf": token}).text
+
+
+UNLABELLED = ["Careers at Widgets", "Business Analyst - Birmingham", "Widgets Ltd is a fast-growing software company.",
+              "You will gather requirements from stakeholders. Salary: up to £42,000. Applications close on 30 October 2026.",
+              "We cannot offer visa sponsorship. This role is hybrid, 3 days a week in our Birmingham office."]
+
+
+def _gemma(monkeypatch, answer):
+    monkeypatch.setattr(ai, "available", lambda: True)
+    monkeypatch.setattr(ai, "_call_model", lambda prompt: json.dumps(answer))
+
+
+def _upload(client_user, lines):
+    return client_user.client.post("/tracker/new/read", data={"csrf": client_user.token()},
+                                   files={"file": ("jd.pdf", _pdf(lines), "application/pdf")}).text
+
+
+def test_gemma_reads_an_unlabelled_job_description_and_its_answers_are_checked(people, monkeypatch):
+    _gemma(monkeypatch, {"title": "Business Analyst", "company": "Widgets Ltd", "location": "Birmingham", "salary_min": 38000,
+                         "salary_max": 42000, "deadline": "2026-10-30", "deadline_quote": "Applications close on 30 October 2026",
+                         "work_mode": "hybrid", "work_mode_quote": "This role is hybrid", "sponsorship": "no_sponsorship",
+                         "sponsorship_quote": "We cannot offer visa sponsorship"})
+    page = _upload(signed_in("wife"), UNLABELLED)
+    for expected in ('value="Business Analyst"', 'value="Widgets Ltd"', 'value="Birmingham"', 'value="38000"', 'value="42000"',
+                     'value="2026-10-30"', "We read the job description"):
+        assert expected in page, expected
+    assert '<option value="hybrid" selected>' in page and '<option value="no_sponsorship" selected>' in page
+
+
+def test_invented_quotes_and_links_are_ignored_and_the_rules_fill_in(people, monkeypatch):
+    _gemma(monkeypatch, {"title": "Business Analyst", "company": "Widgets Ltd", "url": "https://made-up.example/apply",
+                         "deadline": "2026-12-25", "deadline_quote": "Closing on Christmas Day",
+                         "sponsorship": "sponsors", "sponsorship_quote": "We always sponsor everyone"})
+    page = _upload(signed_in("wife"), UNLABELLED)
+    assert 'value="Business Analyst"' in page          # the plain facts are taken
+    assert "made-up.example" not in page and 'value="2026-12-25"' not in page   # but nothing it could not quote or find in the text
+    assert 'value="2026-10-30"' in page                # the rules still found the real date
+    assert '<option value="sponsors" selected>' not in page
+
+
+def test_when_gemma_is_unavailable_the_rules_still_fill_in(people, monkeypatch):
+    monkeypatch.setattr(ai, "available", lambda: True)
+    monkeypatch.setattr(ai, "_call_model", lambda prompt: (_ for _ in ()).throw(ai.AIUnavailable("down")))
+    page = _upload(signed_in("wife"), ADVERT)
+    assert 'value="Widgets Ltd"' in page and "We filled in what we could find" in page

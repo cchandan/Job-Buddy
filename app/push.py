@@ -72,6 +72,23 @@ def job_dict(job, usernames=None):
     return out
 
 
+def _send_jobs(batch, usernames, skipped):
+    """Send a batch; if the live site refuses it, retry one job at a time so one bad job cannot block the rest."""
+    def post(jobs):
+        reply = _post("jobs", {"jobs": [job_dict(j, usernames) for j in jobs]})
+        skipped.extend(reply.get("failed") or [])  # rows the live site could not store
+        return len(jobs) - len(reply.get("failed") or [])
+    try:
+        return post(batch)
+    except PushError as e:
+        if "answered 5" not in str(e) or len(batch) == 1:
+            if len(batch) == 1 and "answered 5" in str(e):
+                skipped.append(batch[0].id)
+                return 0
+            raise
+    return sum(_send_jobs([j], usernames, skipped) for j in batch)
+
+
 def publish(database, run, stop=lambda: False):
     """manifest -> only the rows the site lacks -> who is still listed -> who closed. Returns counts."""
     if not wake():
@@ -80,14 +97,14 @@ def publish(database, run, stop=lambda: False):
     usernames = {p.id: p.username for p in database.query(db.Person)}
     need = set(_post("manifest", {"hashes": {j.id: signature(j.content_hash, job_dict(j, usernames)["matched"]) for j in jobs}})["need"])
     by_id = {j.id: j for j in jobs}
-    sent = 0
+    sent, skipped = 0, []
     ordered = [by_id[i] for i in need if i in by_id]
     for i in range(0, len(ordered), BATCH):
         if stop():
             run.event("push", f"Publishing stopped after {sent} jobs. The rest go next time; nothing is lost.", level="warn")
             return {"sent": sent, "seen": 0, "closed": 0, "stopped": True}
-        _post("jobs", {"jobs": [job_dict(j, usernames) for j in ordered[i:i + BATCH]]})
-        sent += len(ordered[i:i + BATCH])
+        batch = ordered[i:i + BATCH]
+        sent += _send_jobs(batch, usernames, skipped)
     recent = db.utcnow() - timedelta(hours=6)
     seen = [j.id for j in jobs if j.id not in need and j.last_seen and j.last_seen >= recent and not j.closed_at]
     for i in range(0, len(seen), 500):
@@ -95,6 +112,10 @@ def publish(database, run, stop=lambda: False):
     closed = [{"id": j.id, "reason": j.close_reason or "", "at": j.closed_at.isoformat()} for j in jobs if j.closed_at]
     if closed:
         _post("closed", {"items": closed})
+    if skipped:
+        titles = {j.id: j.title for j in jobs}
+        run.event("push", f"{len(skipped)} job(s) were skipped because the live site could not store them, for example: "
+                  + "; ".join(f"{titles.get(i, i)[:50]}" for i in skipped[:3]) + ". The rest were sent.", level="warn")
     run.event("push", f"Published to the online site: {sent} new or changed jobs sent, {len(seen)} marked still listed, "
               f"{len(closed)} closed. Nothing else was sent.")
     return {"sent": sent, "seen": len(seen), "closed": len(closed)}

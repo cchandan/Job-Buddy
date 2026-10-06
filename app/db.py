@@ -296,6 +296,10 @@ def job_row(raw):
     row["licensed_sponsor"], row["citizenship_required"] = bool(raw.get("licensed_sponsor")), bool(raw.get("citizenship_required"))
     if row["is_remote"] is not None:
         row["is_remote"] = bool(row["is_remote"])
+    for col in Job.__table__.columns:  # Postgres rejects text longer than its column; SQLite does not, so trim here
+        limit = getattr(col.type, "length", None)
+        if limit and isinstance(row.get(col.name), str):
+            row[col.name] = row[col.name][:limit]
     for f, default in (("sponsorship", "unclear"), ("work_mode", "unclear"), ("seniority", "")):
         row[f] = row[f] or default
     return row

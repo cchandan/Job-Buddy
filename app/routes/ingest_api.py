@@ -36,17 +36,21 @@ async def manifest(request: Request, database=Depends(auth.get_db)):
 @router.post("/jobs")
 async def jobs(request: Request, database=Depends(auth.get_db)):
     rows = (await request.json()).get("jobs") or []
-    now, counts = db.utcnow(), {"new": 0, "updated": 0}
+    now, counts, failed = db.utcnow(), {"new": 0, "updated": 0}, []
     ids = {p.username: p.id for p in database.query(db.Person)}
     for row in rows[:200]:
         if not row.get("id") or not row.get("title"):
             continue
         row["matched"] = [ids[u] for u in row.get("matched") or [] if u in ids]  # usernames -> this site's ids
-        counts[ingest._upsert(database, row, {}, now)] += 1
+        try:
+            with database.begin_nested():  # a savepoint: a row the database rejects is skipped, the rest still go in
+                counts[ingest._upsert(database, row, {}, now)] += 1
+        except Exception:
+            failed.append(str(row.get("id")))
     database.commit()
     database.add(db.SyncRun(person_id=None, new=counts["new"], updated=counts["updated"], unchanged=0, failed=0))
     database.commit()
-    return counts
+    return {**counts, "failed": failed}
 
 
 @router.post("/seen")

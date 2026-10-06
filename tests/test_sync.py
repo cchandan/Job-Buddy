@@ -334,7 +334,7 @@ def test_the_api_never_overwrites_a_known_deadline_or_touches_the_tracker(browse
     row.update(id="a", title="Junior Developer (new)", company="Acme", location="Leeds", description=LONG, url="https://example.com/a",
                content_hash="new", deadline=None)
     r = browser.client.post("/api/ingest/jobs", json={"jobs": [row]}, headers={"Authorization": "Bearer " + "t" * 30})
-    assert r.status_code == 200 and r.json() == {"new": 0, "updated": 1}
+    assert r.status_code == 200 and r.json() == {"new": 0, "updated": 1, "failed": []}
     with db.SessionLocal() as s:
         job = s.get(db.Job, "a")
         assert job.title.endswith("(new)") and job.deadline == date(2026, 10, 20) and s.query(db.TrackerEntry).count() == 1
@@ -831,3 +831,51 @@ def test_a_board_page_view_never_reads_the_advert_text(people):
     board_selects = [s for s in statements if "FROM jobs" in s and s.lstrip().upper().startswith("SELECT")]
     assert board_selects and not any("jobs.description" in s for s in board_selects)  # heavy column never loaded for the list
     assert any("work_mode" in s and "WHERE" in s for s in board_selects)  # and the filter ran in the database
+
+
+def test_one_bad_row_does_not_fail_the_batch_on_the_live_site(browser, monkeypatch):
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    real = ingest._upsert
+
+    def upsert(database, row, tags, now):
+        if row["id"] == "bad":
+            database.add(db.Job(id="bad", title="x" * 5, company="c", url="u", description="d", sponsorship="s" * 1000))
+            database.flush()  # the database rejects it (or would, on Postgres)
+            raise ValueError("rejected")
+        return real(database, row, tags, now)
+    monkeypatch.setattr(ingest, "_upsert", upsert)
+    rows = [push.job_dict(type("J", (), {f: None for f in db.JOB_FIELDS})()) for _ in range(3)]
+    for r, i in zip(rows, ("a", "bad", "c")):
+        r.update(id=i, title=f"Job {i}", company="Co", location="Leeds", description="d" * 50, url=f"https://x/{i}", content_hash=i)
+    r = browser.client.post("/api/ingest/jobs", json={"jobs": rows}, headers={"Authorization": "Bearer " + "t" * 30})
+    assert r.status_code == 200 and r.json()["failed"] == ["bad"] and r.json()["new"] == 2
+    with db.SessionLocal() as s:
+        assert {j.id for j in s.query(db.Job)} == {"a", "c"}  # the good rows are in, the bad one is not
+
+
+def test_a_refused_batch_is_retried_one_job_at_a_time_so_one_bad_job_cannot_block_the_rest(monkeypatch, people):
+    monkeypatch.setattr(push, "wake", lambda: True)
+    for i in range(3):
+        make_job(f"p{i}", title=f"Job {i}")
+    sent = []
+
+    def post(path, payload):
+        if path == "manifest":
+            return {"need": [j for j in payload["hashes"]]}
+        if path == "jobs":
+            ids = [j["id"] for j in payload["jobs"]]
+            if len(ids) > 1 or ids == ["p1"]:  # the batch is refused, and p1 is refused even on its own
+                raise push.PushError("the live site answered 500 to /jobs: 'boom'")
+            sent.extend(ids)
+        return {}
+    monkeypatch.setattr(push, "_post", post)
+
+    class Run:
+        events = []
+        def event(self, stage, message, level="info", **k):
+            self.events.append((level, message))
+    run = Run()
+    with db.SessionLocal() as s:
+        result = push.publish(s, run)
+    assert sorted(sent) == ["p0", "p2"] and result["sent"] == 2  # everyone but the bad job
+    assert any(level == "warn" and "skipped" in msg and "Job 1" in msg for level, msg in run.events)

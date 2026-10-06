@@ -12,8 +12,9 @@ PAGE_SIZE = 60
 @router.get("/board")
 def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.current_person), q: str = "",
           status: str = "open", location: str = "", work_mode: str = "", sponsorship: str = "", seniority: str = "",
-          sort: str = "", view: str = "", who: int = 0, page: int = 1):
+          sort: str = "", view: str = "", who: str = "", page: int = 1):
     today = web.today()
+    who_id = int(who) if who.isdecimal() else 0
     since = person.last_board_visit
     mine = {} if person.is_admin else {
         e.job_id: e for e in database.query(db.TrackerEntry).filter(db.TrackerEntry.person_id == person.id) if e.job_id}
@@ -32,7 +33,7 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
             continue
         if forme and (person.id not in (job.matched or []) or (profile.needs_sponsorship and job.citizenship_required)):
             continue
-        if person.is_admin and who and who not in (job.matched or []):
+        if person.is_admin and who_id and who_id not in (job.matched or []):
             continue  # the admin can look at one person's matches
         if needle and needle not in f"{job.title} {job.company}".lower():
             continue
@@ -71,7 +72,7 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     page = min(max(page, 1), pages)
     shown = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
     filters = {"q": q, "status": status, "location": location, "work_mode": work_mode, "sponsorship": sponsorship,
-               "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else "", "who": who or ""}
+               "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else "", "who": who_id or ""}
     query = "&".join(f"{k}={v}" for k, v in filters.items() if v)
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all() if person.is_admin else []
     names = {u.id: u.first_name for u in users}

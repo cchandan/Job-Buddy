@@ -445,8 +445,9 @@ def _refresh(run, person_id, state, check_pages):
     summary = {"sources": {n: {**st, "failed_searches": st["failed"], "failed": st["failed"] > 0 and st["searches"] == 0}
                            for n, st in source_stats.items()}}
     tag = totals["tag"]
+    model_labels = sorted(ai.backend_label(name) for name in tag["backends"])
     run.event("tag", f"{totals['new']} new and {totals['updated']} changed jobs tagged: AI was avoided for {tag['avoided']}, "
-              f"{tag['ai_calls']} AI call(s) via {', '.join(sorted(tag['backends'])) or 'no AI tool'}.")
+              f"{tag['ai_calls']} AI call(s) via {', '.join(model_labels) or 'no AI tool'}.")
     if tag["keyword_only"]:
         run.event("tag", f"{tag['keyword_only']} jobs were tagged by keywords only and will be upgraded when AI is available.", level="warn")
 
@@ -461,7 +462,7 @@ def _refresh(run, person_id, state, check_pages):
 
     summary.update(new=totals["new"], updated=totals["updated"], seen=totals["seen"], closed=closed, checked=checked,
                    ai_calls=tag["ai_calls"], ai_avoided=tag["avoided"], keyword_only=tag["keyword_only"],
-                   backends=sorted(tag["backends"]))
+                   backends=model_labels)
     return summary
 
 

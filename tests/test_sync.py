@@ -651,6 +651,15 @@ def test_the_admin_can_filter_the_board_by_who_a_job_was_searched_for(people):
     assert "For wife only" in only and "For brother only" not in only
 
 
+def test_admin_board_search_accepts_everyone_filter(people):
+    make_job("a", title="Graduate Developer")
+
+    response = signed_in("dad").get("/board?who=&q=Graduate")
+
+    assert response.status_code == 200
+    assert "Graduate Developer" in response.text
+
+
 def test_a_job_whose_page_is_still_open_is_not_left_to_drift_to_possibly_closed(people):
     _old_job("openone", "https://c.example/open", days=40)
     with db.SessionLocal() as s:
@@ -665,3 +674,21 @@ def test_the_admin_page_names_the_tagging_models(lab, monkeypatch):
     monkeypatch.setattr(ai, "tagging_backends", lambda: ["claude", "codex"])
     page = signed_in("dad").get("/admin/sync").text
     assert "claude (haiku)" in page and "codex (gpt-6-luna)" in page
+
+
+def test_a_completed_refresh_clearly_names_the_exact_model_used(lab, monkeypatch):
+    lab.jobs["indeed"] = [raw(1)]
+    monkeypatch.setattr(ai, "tagging_backends", lambda: ["codex"])
+    real_tag_batch = ingest.tagging.tag_batch
+
+    def tagged_with_codex(jobs, **kwargs):
+        tags, stats = real_tag_batch(jobs, use_ai=False)
+        stats.update(ai_calls=1, backends=["codex"])
+        return tags, stats
+
+    monkeypatch.setattr(ingest.tagging, "tag_batch", tagged_with_codex)
+    refresh()
+
+    page = signed_in("dad").get("/admin/sync").text
+    assert "Model used:" in page
+    assert "codex (gpt-6-luna)" in page

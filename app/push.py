@@ -34,9 +34,16 @@ def _post(path, payload):
             time.sleep(2 ** attempt * 2)
 
 
-def job_dict(job):
-    """A job as plain JSON, using the same fields the Job table holds."""
+def signature(content_hash, matched_usernames):
+    """What the manifest compares: the advert's version plus who it is for, so a new match is sent even if the advert is unchanged."""
+    return f"{content_hash or ''}|{','.join(sorted(matched_usernames))}"
+
+
+def job_dict(job, usernames=None):
+    """A job as plain JSON, using the same fields the Job table holds. `matched` travels as usernames, because the
+    numeric ids of people differ between this laptop's database and the live site's."""
     out = {f: getattr(job, f) for f in db.JOB_FIELDS}
+    out["matched"] = sorted(usernames[i] for i in (job.matched or []) if usernames and i in usernames)
     out["deadline"] = job.deadline.isoformat() if job.deadline else None
     return out
 
@@ -44,12 +51,13 @@ def job_dict(job):
 def publish(database, run):
     """manifest -> only the rows the site lacks -> who is still listed -> who closed. Returns counts."""
     jobs = database.query(db.Job).all()
-    need = set(_post("manifest", {"hashes": {j.id: j.content_hash or "" for j in jobs}})["need"])
+    usernames = {p.id: p.username for p in database.query(db.Person)}
+    need = set(_post("manifest", {"hashes": {j.id: signature(j.content_hash, job_dict(j, usernames)["matched"]) for j in jobs}})["need"])
     by_id = {j.id: j for j in jobs}
     sent = 0
     ordered = [by_id[i] for i in need if i in by_id]
     for i in range(0, len(ordered), BATCH):
-        _post("jobs", {"jobs": [job_dict(j) for j in ordered[i:i + BATCH]]})
+        _post("jobs", {"jobs": [job_dict(j, usernames) for j in ordered[i:i + BATCH]]})
         sent += len(ordered[i:i + BATCH])
     recent = db.utcnow() - timedelta(hours=6)
     seen = [j.id for j in jobs if j.id not in need and j.last_seen and j.last_seen >= recent and not j.closed_at]

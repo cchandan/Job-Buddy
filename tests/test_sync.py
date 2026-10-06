@@ -692,3 +692,26 @@ def test_a_completed_refresh_clearly_names_the_exact_model_used(lab, monkeypatch
     page = signed_in("dad").get("/admin/sync").text
     assert "Model used:" in page
     assert "codex (gpt-6-luna)" in page
+
+
+def test_who_a_job_is_for_travels_as_a_username_so_different_ids_still_match(browser, monkeypatch, people):
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    auth = {"Authorization": "Bearer " + "t" * 30}
+    laptop_ids = {99: "wife", 98: "nobody-here"}  # on the laptop she is id 99; on the live site she has a different id
+    make_job("m1", title="Matched job")
+    with db.SessionLocal() as s:
+        job = s.get(db.Job, "m1")
+        job.matched = [99, 98]
+        s.commit()
+        row = push.job_dict(job, laptop_ids)
+    assert row["matched"] == ["nobody-here", "wife"]
+    # the live site: the manifest asks for this job because who it is for differs, then maps usernames to its own ids
+    sig = push.signature("", row["matched"])
+    assert "m1" in browser.client.post("/api/ingest/manifest", json={"hashes": {"m1": sig}}, headers=auth).json()["need"]
+    with db.SessionLocal() as s:  # the live site's copy of the job does not carry the laptop's ids
+        s.get(db.Job, "m1").matched = []
+        s.commit()
+    assert browser.client.post("/api/ingest/jobs", json={"jobs": [row]}, headers=auth).status_code == 200
+    with db.SessionLocal() as s:
+        assert s.get(db.Job, "m1").matched == [people["wife"]]  # "nobody-here" does not exist there, so it is dropped
+    assert "m1" not in browser.client.post("/api/ingest/manifest", json={"hashes": {"m1": push.signature("", ["wife"])}}, headers=auth).json()["need"]

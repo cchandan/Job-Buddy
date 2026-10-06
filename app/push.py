@@ -11,27 +11,51 @@ import httpx
 
 from . import db
 
-BATCH = 100
+BATCH = 25  # small requests: a free Render instance has little memory and a short patience
 
 
 def configured():
     return bool(os.getenv("INGEST_URL") and os.getenv("INGEST_TOKEN"))
 
 
+class PushError(RuntimeError):
+    """A failure to publish, with a message already written for the admin."""
+
+
+WAITS = (5, 15, 30, 60)  # seconds between tries when the site is down or still waking up
+
+
+def wake():
+    """A free Render service sleeps when idle and answers 502 until it is awake: ask it to wake and wait up to ~2 minutes."""
+    url = os.environ["INGEST_URL"].rstrip("/") + "/health"
+    for wait in (0,) + WAITS:
+        time.sleep(wait)
+        try:
+            if httpx.get(url, timeout=60).status_code == 200:
+                return True
+        except httpx.TransportError:
+            pass
+    return False
+
+
 def _post(path, payload):
     url = os.environ["INGEST_URL"].rstrip("/") + "/api/ingest/" + path
     headers = {"Authorization": "Bearer " + os.environ["INGEST_TOKEN"]}
-    for attempt in range(3):
+    for attempt, wait in enumerate((0,) + WAITS):
+        time.sleep(wait)
         try:
-            r = httpx.post(url, json=payload, headers=headers, timeout=60)
-            if r.status_code in (401, 403):
-                raise PermissionError("the live site refused the token")
-            r.raise_for_status()
-            return r.json()
-        except (httpx.TransportError, httpx.HTTPStatusError):
-            if attempt == 2:
-                raise
-            time.sleep(2 ** attempt * 2)
+            r = httpx.post(url, json=payload, headers=headers, timeout=120)
+        except httpx.TransportError as e:
+            if attempt == len(WAITS):
+                raise PushError(f"could not reach the live site ({type(e).__name__})")
+            continue
+        if r.status_code in (401, 403):
+            raise PermissionError("the live site refused the token: check INGEST_TOKEN matches on Render and in .env")
+        if r.status_code in (429, 502, 503, 504) and attempt < len(WAITS):
+            continue  # down or waking up: try again
+        if r.status_code >= 400:
+            raise PushError(f"the live site answered {r.status_code} to /{path}: {r.text[:150]!r}")
+        return r.json()
 
 
 def signature(content_hash, matched_usernames):
@@ -50,6 +74,8 @@ def job_dict(job, usernames=None):
 
 def publish(database, run):
     """manifest -> only the rows the site lacks -> who is still listed -> who closed. Returns counts."""
+    if not wake():
+        raise PushError("the live site did not wake up (still answering errors after about 2 minutes)")
     jobs = database.query(db.Job).all()
     usernames = {p.id: p.username for p in database.query(db.Person)}
     need = set(_post("manifest", {"hashes": {j.id: signature(j.content_hash, job_dict(j, usernames)["matched"]) for j in jobs}})["need"])

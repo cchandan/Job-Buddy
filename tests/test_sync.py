@@ -314,6 +314,7 @@ def test_publishing_sends_only_the_difference(lab, browser, monkeypatch):
         assert r.status_code == 200, r.text
         return r.json()
     monkeypatch.setattr(push, "_post", post)
+    monkeypatch.setattr(push, "wake", lambda: True)
     lab.jobs["indeed"] = [raw(i) for i in range(3)]
     refresh()
     assert sent.count("jobs") == 1 and "manifest" in sent and sent[-1] == "log"
@@ -715,3 +716,24 @@ def test_who_a_job_is_for_travels_as_a_username_so_different_ids_still_match(bro
     with db.SessionLocal() as s:
         assert s.get(db.Job, "m1").matched == [people["wife"]]  # "nobody-here" does not exist there, so it is dropped
     assert "m1" not in browser.client.post("/api/ingest/manifest", json={"hashes": {"m1": push.signature("", ["wife"])}}, headers=auth).json()["need"]
+
+
+def test_push_waits_for_a_sleeping_site_and_says_what_it_answered(monkeypatch):
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    monkeypatch.setenv("INGEST_URL", "https://live.example")
+    monkeypatch.setattr(push.time, "sleep", lambda s: None)
+
+    class R:
+        def __init__(self, code, body="{}"):
+            self.status_code, self.text = code, body
+        def json(self):
+            return {"need": []}
+    answers = iter([R(502), R(502), R(200)])
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: next(answers))
+    assert push._post("manifest", {}) == {"need": []}  # two 502s while waking, then it works
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: R(500, "boom"))
+    with pytest.raises(push.PushError, match="answered 500 to /manifest"):
+        push._post("manifest", {})
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: R(401))
+    with pytest.raises(PermissionError, match="INGEST_TOKEN"):
+        push._post("manifest", {})

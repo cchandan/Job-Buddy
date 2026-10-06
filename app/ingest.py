@@ -297,6 +297,8 @@ def _with_timeout(fn, seconds):
 
 
 def _plain(e):
+    if isinstance(e, (push.PushError, PermissionError)) and str(e):
+        return str(e)[:200]  # these already say what happened, in words
     name = type(e).__name__
     text = str(e).lower()
     if "429" in text or "rate" in text or "too many" in text:

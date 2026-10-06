@@ -1,5 +1,7 @@
 """Admin: Admin home, accounts, view as user, assign, review CVs, jobs sync. Every route here needs an admin."""
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from sqlalchemy import func, or_
+from sqlalchemy.orm import defer
 
 from .. import ai, auth, db, deadlines, ingest, runlog, sources, summary, tracking, web
 from . import calendar as calendar_routes
@@ -104,8 +106,11 @@ def view_tracker(user_id: int, request: Request, database=Depends(auth.get_db), 
     found = []
     if q.strip():
         needle = q.strip().lower()
-        for job in database.query(db.Job):
-            if needle in f"{job.title} {job.company}".lower() and deadlines.listing_status(job, today) != "closed":
+        hits = database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls)).filter(
+            or_(func.lower(db.Job.title).contains(needle, autoescape=True),
+                func.lower(db.Job.company).contains(needle, autoescape=True))).limit(200)
+        for job in hits:  # the database finds matches; only closed ones are skipped here
+            if deadlines.listing_status(job, today) != "closed":
                 found.append({"job": job, "chip": deadlines.chip(job.deadline, today), "has": job.id in have})
                 if len(found) >= 8:
                     break

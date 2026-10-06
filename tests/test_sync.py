@@ -815,3 +815,19 @@ def test_the_bulk_copy_script_copies_jobs_by_username_and_is_safe_to_repeat(peop
         assert set(rows) == {"j0", "j1", "j2"} and rows["j0"].title == "Job 0"
         assert rows["j1"].matched == [77]                # her id on the live site, found by username
         assert rows["j0"].deadline == date(2026, 12, 1)  # a deadline the live site already had is kept
+
+
+def test_a_board_page_view_never_reads_the_advert_text(people):
+    from sqlalchemy import event
+    make_job("big", title="Searchable role", description="HEAVY ADVERT TEXT " * 400)
+    statements = []
+    listener = lambda conn, cursor, statement, *a: statements.append(statement)  # noqa: E731
+    event.listen(db.engine, "before_cursor_execute", listener)
+    try:
+        page = signed_in("dad").get("/board?q=searchable&work_mode=hybrid").text
+    finally:
+        event.remove(db.engine, "before_cursor_execute", listener)
+    assert "Searchable role" in page
+    board_selects = [s for s in statements if "FROM jobs" in s and s.lstrip().upper().startswith("SELECT")]
+    assert board_selects and not any("jobs.description" in s for s in board_selects)  # heavy column never loaded for the list
+    assert any("work_mode" in s and "WHERE" in s for s in board_selects)  # and the filter ran in the database

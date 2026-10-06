@@ -11,7 +11,7 @@ import httpx
 
 from . import db
 
-BATCH = 25  # small requests: a free Render instance has little memory and a short patience
+BATCH = 25  # small requests: a free Render instance has little memory (200 per request made it fall over)
 
 
 def configured():

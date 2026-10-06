@@ -25,10 +25,17 @@ def main():
         sys.exit("Set LIVE_DATABASE_URL to the Supabase pooled connection string for this one command.")
     if url.startswith(("postgres://", "postgresql://")):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1).replace("postgresql://", "postgresql+psycopg2://", 1)
+    if "YOUR" in url:
+        sys.exit("That is still the template. Replace YOURREF, YOURPASSWORD and YOURREGION with the real values from the "
+                 "Supabase dashboard (Project Settings > Database > Connection string > Transaction pooler).")
     live = sessionmaker(bind=create_engine(url, pool_pre_ping=True), expire_on_commit=False)()
     with db.SessionLocal() as local:
         names = {p.id: p.username for p in local.query(db.Person)}
-        live_ids = {p.username: p.id for p in live.query(db.Person)}
+        try:
+            live_ids = {p.username: p.id for p in live.query(db.Person)}
+        except Exception as e:  # a wrong host, password or port
+            sys.exit(f"Could not connect to the live database ({type(e).__name__}). Check the host, the password (special "
+                     "characters like @ / # need %-codes) and that you used the pooled connection string.")
         missing = sorted({n for n in names.values() if n not in live_ids and n != "admin"})
         if missing:
             print("Not on the live site yet (their matches will be skipped):", ", ".join(missing))

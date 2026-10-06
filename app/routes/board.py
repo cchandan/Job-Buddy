@@ -2,6 +2,8 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from sqlalchemy import func, or_
+from sqlalchemy.orm import defer
 
 from .. import auth, db, deadlines, ingest, tracking, web
 
@@ -25,7 +27,22 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     sort = sort or ("best" if forme else "deadline")
     rows = []
     needle, place = q.strip().lower(), location.strip().lower()
-    for job in database.query(db.Job):
+    # The database narrows the list and the heavy advert text is never read: a list page does not show it. What is left
+    # (closing status, "for you" matches, ranking) is cheap Python over a small, light set.
+    # ponytail: ceiling is a few tens of thousands of jobs; past that, move status and matches into SQL too.
+    query = database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls))
+    if needle:
+        query = query.filter(or_(func.lower(db.Job.title).contains(needle, autoescape=True),
+                                 func.lower(db.Job.company).contains(needle, autoescape=True)))
+    if place:
+        query = query.filter(func.lower(db.Job.location).contains(place, autoescape=True))
+    if work_mode:
+        query = query.filter(db.Job.work_mode == work_mode)
+    if sponsorship:
+        query = query.filter(db.Job.sponsorship == sponsorship)
+    if seniority:
+        query = query.filter(db.Job.seniority == seniority)
+    for job in query:
         listing = deadlines.listing_status(job, today)
         if status == "open" and listing == "closed":
             continue  # closed jobs are hidden unless asked for
@@ -35,16 +52,6 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
             continue
         if person.is_admin and who_id and who_id not in (job.matched or []):
             continue  # the admin can look at one person's matches
-        if needle and needle not in f"{job.title} {job.company}".lower():
-            continue
-        if place and place not in (job.location or "").lower():
-            continue
-        if work_mode and job.work_mode != work_mode:
-            continue
-        if sponsorship and job.sponsorship != sponsorship:
-            continue
-        if seniority and job.seniority != seniority:
-            continue
         rows.append({"job": job, "listing": listing, "chip": deadlines.chip(job.deadline, today),
                      "entry": mine.get(job.id), "is_new": bool(since and job.first_seen and job.first_seen > since)})
 

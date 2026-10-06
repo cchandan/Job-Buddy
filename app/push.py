@@ -11,7 +11,7 @@ import httpx
 
 from . import db
 
-BATCH = 25  # small requests: a free Render instance has little memory and a short patience
+BATCH = 200  # the live site accepts up to 200 jobs per request; lower this if a free Render instance keeps running out of memory
 
 
 def configured():

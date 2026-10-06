@@ -317,6 +317,7 @@ def refresh(person_id=None, state=STATE, check_pages=True):
     run = runlog.Run(hook=lambda level, message: state["notes"].append(message))
     state["run_id"] = run.id
     ai.reset_backends()
+    ai.load_tagging_order()
     summary, crashed = {}, False
     try:
         summary = _refresh(run, person_id, state, check_pages) or {}

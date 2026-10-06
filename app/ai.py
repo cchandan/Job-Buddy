@@ -60,7 +60,8 @@ def _call_model(prompt):
 # ---------- backends for job tagging (laptop only) ----------
 # Tagging tries these in order and uses the first that works, so no paid API is needed. CV tailoring on the live site
 # keeps using Gemini only. A backend that hits a limit is skipped for the rest of the run.
-TAGGING_BACKENDS = ("claude", "codex", "ollama", "gemini")
+ALL_BACKENDS = ("claude", "codex", "ollama", "gemini")
+_order = list(ALL_BACKENDS)  # the admin can change this on the Jobs sync page
 CLAUDE_MODEL = os.getenv("TAGGING_CLAUDE_MODEL", "haiku")
 CODEX_MODEL = os.getenv("TAGGING_CODEX_MODEL", "gpt-6-luna")  # OpenAI's smallest, cheapest model, made for high-volume extraction
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3")
@@ -98,8 +99,29 @@ def backend_label(name):
     return f"{name} ({model})" if model else name
 
 
+def tagging_order():
+    return tuple(_order)
+
+
+def load_tagging_order():
+    """Read the admin's choice (none saved means the default order). An empty choice means keywords only."""
+    with db.SessionLocal() as s:
+        row = s.get(db.AppSetting, "tagging_order")
+    if row is not None:
+        _order[:] = [b for b in (row.value or "").split(",") if b in ALL_BACKENDS]
+    return tagging_order()
+
+
+def save_tagging_order(names):
+    names = list(dict.fromkeys(n for n in names if n in ALL_BACKENDS))
+    with db.SessionLocal() as s:
+        s.merge(db.AppSetting(key="tagging_order", value=",".join(names)))
+        s.commit()
+    _order[:] = names
+
+
 def tagging_backends():
-    return [b for b in TAGGING_BACKENDS if backend_ready(b)]
+    return [b for b in _order if backend_ready(b)]
 
 
 def _run_cli(cmd, prompt, name):

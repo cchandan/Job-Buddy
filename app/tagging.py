@@ -440,7 +440,7 @@ def tag_batch(jobs, today=None, use_ai=True, size=BATCH_SIZE):
                         "excerpt": _excerpt(job.get("description") or "", need)} for job, _, need in chunk]
             try:
                 out = ai.ask_json(BATCH_PROMPT.format(today=today.isoformat(), jobs=json.dumps(payload)), BatchOut,
-                                  count=False, backends=ai.TAGGING_BACKENDS)
+                                  count=False, backends=ai.tagging_order())
                 stats["ai_calls"] += 1
                 stats["backends"].add(ai.LAST["backend"])
                 answered = {item.id: item for item in out.results}

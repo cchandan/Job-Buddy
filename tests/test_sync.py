@@ -759,3 +759,59 @@ def test_stop_during_publishing_ends_the_upload_cleanly(lab, monkeypatch):
     monkeypatch.setattr(push, "send_log", lambda run_id: None)
     ingest.refresh(None, state_ref, check_pages=False)
     assert len(sent) == 1  # it stopped after the first batch, not all three
+
+
+def test_the_admin_chooses_and_orders_the_tagging_tools(lab, monkeypatch):
+    monkeypatch.undo()  # use the real chain here, not the lab's stub
+    monkeypatch.setattr(ai, "backend_ready", lambda name: name in ("claude", "codex"))
+    dad = signed_in("dad")
+    try:
+        dad.post("/admin/sync/tagging", {"pick0": "codex", "pick1": "claude", "pick2": ""})
+        assert ai.load_tagging_order() == ("codex", "claude") and ai.tagging_backends() == ["codex", "claude"]  # saved, in that order
+        page = dad.get("/admin/sync").text
+        assert '<option value="codex" selected>' in page and "Third choice" in page
+        dad.post("/admin/sync/tagging", {"pick0": "", "pick1": "", "pick2": ""})
+        assert ai.load_tagging_order() == () and ai.tagging_backends() == []  # none: keywords only
+    finally:
+        ai._order[:] = list(ai.ALL_BACKENDS)
+        with db.SessionLocal() as s:
+            s.query(db.AppSetting).delete()
+            s.commit()
+
+
+def test_routine_plan_lines_are_hidden_but_warnings_still_show(lab):
+    lab.jobs["indeed"] = [raw(1)]
+    lab.fail = {"linkedin"}
+    refresh()
+    page = signed_in("dad").get("/admin/sync").text
+    assert "Not using zip_recruiter" not in page and "different searches" not in page  # routine plan lines are gone
+    assert "rate limited" in page  # a real problem is still shown
+
+
+def test_the_bulk_copy_script_copies_jobs_by_username_and_is_safe_to_repeat(people, monkeypatch, tmp_path):
+    import importlib.util
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    target_url = f"sqlite:///{tmp_path}/live.db"
+    live_engine = create_engine(target_url)
+    db.Base.metadata.create_all(live_engine)
+    with sessionmaker(bind=live_engine)() as s:  # the "live site": her account has a different id, and one job is already there
+        s.add(db.Person(id=77, username="wife", name="Wife", role="user", password_hash="x"))
+        s.add(db.Job(id="j0", title="Old title", company="Co", url="u", description="d", deadline=date(2026, 12, 1)))
+        s.commit()
+    for i in range(3):
+        make_job(f"j{i}", title=f"Job {i}")
+    with db.SessionLocal() as s:
+        s.get(db.Job, "j1").matched = [people["wife"]]
+        s.commit()
+    spec = importlib.util.spec_from_file_location("copy_jobs", "scripts/copy_jobs_to_live.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setenv("LIVE_DATABASE_URL", target_url)
+    mod.main()
+    mod.main()  # again: nothing is duplicated
+    with sessionmaker(bind=live_engine)() as s:
+        rows = {j.id: j for j in s.query(db.Job)}
+        assert set(rows) == {"j0", "j1", "j2"} and rows["j0"].title == "Job 0"
+        assert rows["j1"].matched == [77]                # her id on the live site, found by username
+        assert rows["j0"].deadline == date(2026, 12, 1)  # a deadline the live site already had is kept

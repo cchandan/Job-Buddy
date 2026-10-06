@@ -232,7 +232,8 @@ def sync_page(request: Request, database=Depends(auth.get_db), person=Depends(au
     history = database.query(db.SyncRun).order_by(db.SyncRun.at.desc()).limit(10).all()
     picked, skipped = sources.plan()
     return web.page(request, "admin_sync.html", person, "sync", profiles=ingest.profiles(database),
-                    can_fetch=bool(picked), picked=picked, skipped=skipped, backends=[ai.backend_label(b) for b in ai.tagging_backends()],
+                    can_fetch=bool(picked), picked=picked, skipped=skipped, backends=[ai.backend_label(b) for b in (ai.load_tagging_order() and ai.tagging_backends())],
+                    order=ai.tagging_order(), choices=[(b, ai.backend_label(b), ai.backend_ready(b)) for b in ai.ALL_BACKENDS],
                     state=dict(ingest.STATE), prog=ingest.progress(), runs=runlog.recent(database, 5), notes=runlog.attention(database, web.today()),
                     history=history, today_=web.today())
 
@@ -255,6 +256,13 @@ def sync_profile(person_id: int, request: Request, database=Depends(auth.get_db)
     profile.needs_sponsorship, profile.enabled = bool(needs_sponsorship), bool(enabled)
     database.commit()
     web.flash(request, f"Saved {profile.person.first_name}'s search.")
+    return web.redirect("/admin/sync")
+
+
+@router.post("/sync/tagging")
+def sync_tagging(request: Request, pick0: str = Form(""), pick1: str = Form(""), pick2: str = Form("")):
+    ai.save_tagging_order([pick0, pick1, pick2])
+    web.flash(request, "Tagging order saved." if ai.tagging_order() else "Saved: jobs will be tagged by keywords only.")
     return web.redirect("/admin/sync")
 
 

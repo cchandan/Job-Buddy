@@ -200,6 +200,13 @@ class SyncRun(Base):
     person = relationship(Person)
 
 
+class AppSetting(Base):
+    """Small admin choices that must survive restarts (for example which AI tools tag jobs, and in what order)."""
+    __tablename__ = "app_settings"
+    key = Column(String(60), primary_key=True)
+    value = Column(Text, default="")
+
+
 class FetchState(Base):
     """When each (source, search) last succeeded, so the next fetch asks only for what is newer."""
     __tablename__ = "fetch_state"

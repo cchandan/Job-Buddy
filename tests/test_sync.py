@@ -314,6 +314,7 @@ def test_publishing_sends_only_the_difference(lab, browser, monkeypatch):
         assert r.status_code == 200, r.text
         return r.json()
     monkeypatch.setattr(push, "_post", post)
+    monkeypatch.setattr(push, "wake", lambda: True)
     lab.jobs["indeed"] = [raw(i) for i in range(3)]
     refresh()
     assert sent.count("jobs") == 1 and "manifest" in sent and sent[-1] == "log"
@@ -525,7 +526,7 @@ def test_a_search_is_only_marked_done_after_its_jobs_are_saved(lab, monkeypatch)
 def test_stop_keeps_what_was_saved_and_still_publishes(lab, monkeypatch):
     published = []
     monkeypatch.setattr(push, "configured", lambda: True)
-    monkeypatch.setattr(push, "publish", lambda s, run: published.append(1) or {})
+    monkeypatch.setattr(push, "publish", lambda s, run, stop=None: published.append(1) or {})
     monkeypatch.setattr(push, "send_log", lambda run_id: None)
     state = dict(ingest.STATE, running=True, stop=False)
 
@@ -542,7 +543,7 @@ def test_stop_keeps_what_was_saved_and_still_publishes(lab, monkeypatch):
 def test_a_crash_part_way_keeps_earlier_searches_and_still_publishes(lab, monkeypatch):
     published = []
     monkeypatch.setattr(push, "configured", lambda: True)
-    monkeypatch.setattr(push, "publish", lambda s, run: published.append(1) or {})
+    monkeypatch.setattr(push, "publish", lambda s, run, stop=None: published.append(1) or {})
     monkeypatch.setattr(push, "send_log", lambda run_id: None)
     set_profile("wife", keywords="a, b")
     calls = []
@@ -715,3 +716,102 @@ def test_who_a_job_is_for_travels_as_a_username_so_different_ids_still_match(bro
     with db.SessionLocal() as s:
         assert s.get(db.Job, "m1").matched == [people["wife"]]  # "nobody-here" does not exist there, so it is dropped
     assert "m1" not in browser.client.post("/api/ingest/manifest", json={"hashes": {"m1": push.signature("", ["wife"])}}, headers=auth).json()["need"]
+
+
+def test_push_waits_for_a_sleeping_site_and_says_what_it_answered(monkeypatch):
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    monkeypatch.setenv("INGEST_URL", "https://live.example")
+    monkeypatch.setattr(push.time, "sleep", lambda s: None)
+
+    class R:
+        def __init__(self, code, body="{}"):
+            self.status_code, self.text = code, body
+        def json(self):
+            return {"need": []}
+    answers = iter([R(502), R(502), R(200)])
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: next(answers))
+    assert push._post("manifest", {}) == {"need": []}  # two 502s while waking, then it works
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: R(500, "boom"))
+    with pytest.raises(push.PushError, match="answered 500 to /manifest"):
+        push._post("manifest", {})
+    monkeypatch.setattr(push.httpx, "post", lambda *a, **k: R(401))
+    with pytest.raises(PermissionError, match="INGEST_TOKEN"):
+        push._post("manifest", {})
+
+
+def test_stop_during_publishing_ends_the_upload_cleanly(lab, monkeypatch):
+    monkeypatch.setenv("INGEST_URL", "https://live.example")
+    monkeypatch.setenv("INGEST_TOKEN", "t" * 30)
+    monkeypatch.setattr(push, "wake", lambda: True)
+    monkeypatch.setattr(push, "BATCH", 1)
+    sent = []
+
+    def post(path, payload):
+        if path == "manifest":
+            return {"need": list(payload["hashes"])}
+        if path == "jobs":
+            sent.append(1)
+            state_ref["stop_publish"] = True  # the admin presses Stop after the first batch
+        return {}
+    monkeypatch.setattr(push, "_post", post)
+    lab.jobs["indeed"] = [raw(i) for i in range(3)]
+    state_ref = dict(ingest.STATE, running=True, stop=False)
+    monkeypatch.setattr(push, "send_log", lambda run_id: None)
+    ingest.refresh(None, state_ref, check_pages=False)
+    assert len(sent) == 1  # it stopped after the first batch, not all three
+
+
+def test_the_admin_chooses_and_orders_the_tagging_tools(lab, monkeypatch):
+    monkeypatch.undo()  # use the real chain here, not the lab's stub
+    monkeypatch.setattr(ai, "backend_ready", lambda name: name in ("claude", "codex"))
+    dad = signed_in("dad")
+    try:
+        dad.post("/admin/sync/tagging", {"pick0": "codex", "pick1": "claude", "pick2": ""})
+        assert ai.load_tagging_order() == ("codex", "claude") and ai.tagging_backends() == ["codex", "claude"]  # saved, in that order
+        page = dad.get("/admin/sync").text
+        assert '<option value="codex" selected>' in page and "Third choice" in page
+        dad.post("/admin/sync/tagging", {"pick0": "", "pick1": "", "pick2": ""})
+        assert ai.load_tagging_order() == () and ai.tagging_backends() == []  # none: keywords only
+    finally:
+        ai._order[:] = list(ai.ALL_BACKENDS)
+        with db.SessionLocal() as s:
+            s.query(db.AppSetting).delete()
+            s.commit()
+
+
+def test_routine_plan_lines_are_hidden_but_warnings_still_show(lab):
+    lab.jobs["indeed"] = [raw(1)]
+    lab.fail = {"linkedin"}
+    refresh()
+    page = signed_in("dad").get("/admin/sync").text
+    assert "Not using zip_recruiter" not in page and "different searches" not in page  # routine plan lines are gone
+    assert "rate limited" in page  # a real problem is still shown
+
+
+def test_the_bulk_copy_script_copies_jobs_by_username_and_is_safe_to_repeat(people, monkeypatch, tmp_path):
+    import importlib.util
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    target_url = f"sqlite:///{tmp_path}/live.db"
+    live_engine = create_engine(target_url)
+    db.Base.metadata.create_all(live_engine)
+    with sessionmaker(bind=live_engine)() as s:  # the "live site": her account has a different id, and one job is already there
+        s.add(db.Person(id=77, username="wife", name="Wife", role="user", password_hash="x"))
+        s.add(db.Job(id="j0", title="Old title", company="Co", url="u", description="d", deadline=date(2026, 12, 1)))
+        s.commit()
+    for i in range(3):
+        make_job(f"j{i}", title=f"Job {i}")
+    with db.SessionLocal() as s:
+        s.get(db.Job, "j1").matched = [people["wife"]]
+        s.commit()
+    spec = importlib.util.spec_from_file_location("copy_jobs", "scripts/copy_jobs_to_live.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setenv("LIVE_DATABASE_URL", target_url)
+    mod.main()
+    mod.main()  # again: nothing is duplicated
+    with sessionmaker(bind=live_engine)() as s:
+        rows = {j.id: j for j in s.query(db.Job)}
+        assert set(rows) == {"j0", "j1", "j2"} and rows["j0"].title == "Job 0"
+        assert rows["j1"].matched == [77]                # her id on the live site, found by username
+        assert rows["j0"].deadline == date(2026, 12, 1)  # a deadline the live site already had is kept

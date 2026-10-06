@@ -8,7 +8,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import auth, db, ingest
+from .. import auth, db, ingest, push
 
 router = APIRouter(prefix="/api/ingest")
 
@@ -27,17 +27,21 @@ router.dependencies = [Depends(require_token)]
 async def manifest(request: Request, database=Depends(auth.get_db)):
     """Which of the laptop's jobs does the site lack, or hold in a different version?"""
     hashes = (await request.json()).get("hashes") or {}
-    have = {j.id: (j.content_hash or "") for j in database.query(db.Job.id, db.Job.content_hash)}
-    return {"need": [i for i, h in hashes.items() if i not in have or have[i] != (h or "")]}
+    names = {p.id: p.username for p in database.query(db.Person)}
+    have = {j.id: push.signature(j.content_hash, [names[i] for i in (j.matched or []) if i in names])
+            for j in database.query(db.Job.id, db.Job.content_hash, db.Job.matched)}
+    return {"need": [i for i, h in hashes.items() if i not in have or have[i] != h]}
 
 
 @router.post("/jobs")
 async def jobs(request: Request, database=Depends(auth.get_db)):
     rows = (await request.json()).get("jobs") or []
     now, counts = db.utcnow(), {"new": 0, "updated": 0}
+    ids = {p.username: p.id for p in database.query(db.Person)}
     for row in rows[:200]:
         if not row.get("id") or not row.get("title"):
             continue
+        row["matched"] = [ids[u] for u in row.get("matched") or [] if u in ids]  # usernames -> this site's ids
         counts[ingest._upsert(database, row, {}, now)] += 1
     database.commit()
     database.add(db.SyncRun(person_id=None, new=counts["new"], updated=counts["updated"], unchanged=0, failed=0))

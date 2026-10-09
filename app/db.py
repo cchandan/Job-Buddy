@@ -54,6 +54,7 @@ class Person(Base):
     name = Column(String(80), nullable=False)
     role = Column(String(10), nullable=False, default="user")  # "user" or "admin"
     password_hash = Column(String(200), nullable=False)
+    password_enc = Column(Text)  # encrypted copy of an admin-issued password (see vault.py); None once they choose their own
     session_version = Column(Integer, nullable=False, default=1)  # raised to sign the person out everywhere
     failed_count = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime)

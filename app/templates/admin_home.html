@@ -8,6 +8,7 @@
     <p class="sub">{{ line }}</p>
   </div>
   <div class="rowx">
+    <a class="btn" href="/admin/passwords">View passwords</a>
     {% if queue %}<a class="btn" href="/admin/review">Review {{ queue|length }} CV{{ '' if queue|length == 1 else 's' }}</a>{% endif %}
     <a class="btn btn--primary" href="/admin/sync">Refresh jobs</a>
   </div>

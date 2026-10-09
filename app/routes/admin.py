@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, runlog, sources, summary, tracking, web
+from .. import ai, auth, db, deadlines, ingest, runlog, sources, summary, tracking, vault, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -32,7 +32,7 @@ def create_account(request: Request, database=Depends(auth.get_db), person=Depen
     else:
         password = auth.new_password()
         database.add(db.Person(name=name, username=username, role="admin" if role == "admin" else "user",
-                               password_hash=auth.hash_password(password)))
+                               password_hash=auth.hash_password(password), password_enc=vault.seal(password)))
         database.commit()
         # Shown once on the next page, then gone: only the hash is kept.
         request.session["new_account"] = {"name": name, "username": username, "password": password, "what": "created"}
@@ -50,12 +50,38 @@ def _account(database, account_id):
 def new_password(account_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
     account = _account(database, account_id)
     password = auth.new_password()
-    auth.set_password(account, password)  # the old password stops working and the person is signed out everywhere
+    auth.set_password(account, password, issued=True)  # the old password stops working and the person is signed out everywhere
     database.commit()
     if account.id == person.id:
         auth.start_session(request, account)
     request.session["new_account"] = {"name": account.name, "username": account.username, "password": password, "what": "reset"}
     return web.redirect("/admin")
+
+
+@router.get("/passwords")
+def passwords_page(request: Request, person=Depends(auth.require_admin)):
+    return _passwords(request, person, rows=None)
+
+
+@router.post("/passwords")
+def passwords_reveal(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
+                     password: str = Form("")):
+    """Show every user's password, but only after the admin types their own again. Nothing is remembered:
+    the next visit asks again."""
+    problem = auth.confirm_admin(database, person, password[:200])
+    if problem:
+        error = ("Too many wrong attempts. Try again in a few minutes." if problem == "locked"
+                 else "That isn't your password, so nothing is shown.")
+        return _passwords(request, person, rows=None, error=error, status_code=401)
+    users = database.query(db.Person).filter(db.Person.role != "admin").order_by(db.Person.name).all()
+    rows = [{"user": u, "password": vault.unseal(u.password_enc)} for u in users]
+    return _passwords(request, person, rows=rows)
+
+
+def _passwords(request, person, rows, error="", status_code=200):
+    response = web.page(request, "admin_passwords.html", person, "admin", rows=rows, error=error, status_code=status_code)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.post("/accounts/{account_id}/remove")

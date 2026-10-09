@@ -9,5 +9,6 @@ google-genai
 python-dotenv
 alembic
 itsdangerous
+cryptography
 httpx
 pywebpush

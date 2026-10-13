@@ -78,6 +78,9 @@ def page(request, name, person, active="", status_code=200, **ctx):
     if person is not None and person.is_admin:  # the counts and dots in the admin sidebar
         with db.SessionLocal() as s:
             nav = summary.nav(s, today())
+    elif person is not None:  # the counts in the user sidebar
+        with db.SessionLocal() as s:
+            nav = summary.user_nav(s, person, today())
     ctx.pop("database", None)
     ctx.setdefault("viewing", None)
     has_session = "session" in request.scope  # missing only on the last-resort error page

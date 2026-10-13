@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_badge with context %}
+{% from "_macros.html" import status_badge, icon with context %}
 {% block title %}{{ (owner.first_name ~ "'s Calendar") if readonly else "Calendar" }}{% endblock %}
 {% block content %}
 <div class="head">
@@ -7,48 +7,37 @@
     <h1 class="t">{{ (owner.first_name ~ "'s Calendar") if readonly else "Calendar" }}</h1>
     <p class="sub">Deadlines from {{ (owner.first_name ~ "'s") if readonly else "your" }} Tracker</p>
   </div>
-  <div class="rowx"><span class="ev" style="padding: 4px 10px">Still to apply</span><span class="ev ev--done" style="padding: 3px 10px">Already applied</span></div>
+  <div class="legend"><span><i class="key key--todo"></i>Still to apply</span><span><i class="key key--done"></i>Already applied</span></div>
 </div>
 
 {% if not has_any %}
-<div class="card empty"><h2 class="t2">No deadlines yet</h2><p class="sub">They appear here when a job in the Tracker has one.</p>
+<div class="panel panel--pad empty-panel"><h2 class="t2">No deadlines yet</h2><p class="sub">They appear here when a job in the Tracker has one.</p>
   {% if not readonly %}<a class="btn btn--primary" href="/board">Open the Job Board</a>{% endif %}</div>
 {% else %}
-<div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start">
-
-  <section class="stack" aria-label="Upcoming deadlines" style="flex: 1 1 320px; min-width: 0">
-    <h2 class="t2">Upcoming</h2>
+<div class="split split--cal">
+  <section class="panel" aria-label="Upcoming deadlines">
+    <h2 class="t2 panel-head" style="display: block">Upcoming</h2>
     {% for label, items in groups.items() if items %}
-    <div class="card stack">
-      <div class="lab">{{ label }}</div>
-      {% for v in items %}
-      <a href="{{ entry_base }}/{{ v.entry.id }}" style="color: inherit; text-decoration: none; display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 44px">
-        <span><strong>{{ v.job.title }}</strong><br><span class="meta">{{ v.job.company }} · {{ v.deadline.strftime("%a") }} {{ v.deadline|dmy }}</span></span>
-        {{ status_badge(v.entry.status) }}
-      </a>
-      {% endfor %}
-    </div>
+    <div class="grouplabel">{{ label }}</div>
+    {% for v in items %}
+    <a class="prow plain" href="{{ entry_base }}/{{ v.entry.id }}"><div class="grow"><div class="jt">{{ v.job.title }}</div><div class="meta">{{ v.job.company }} · {{ v.deadline.strftime("%a") }} {{ v.deadline|dmy }}</div></div>{{ status_badge(v.entry.status) }}</a>
+    {% endfor %}
     {% else %}
-    <div class="card"><p class="sub">No deadlines coming up.</p></div>
+    <p class="sub" style="padding: 0 20px 20px">No deadlines coming up.</p>
     {% endfor %}
 
     {% if undated %}
-    <div class="card stack" style="border-style: dashed">
-      <div class="lab">No deadline set</div>
-      {% for v in undated %}
-      <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center">
-        <span><strong>{{ v.job.title }}</strong><br><span class="meta">{{ v.job.company }}</span></span>
-        <a class="btn" href="{{ entry_base }}/{{ v.entry.id }}">{{ "View" if readonly else "Set deadline" }}</a>
-      </div>
-      {% endfor %}
-    </div>
+    <div class="grouplabel">No deadline set</div>
+    {% for v in undated %}
+    <div class="prow"><div class="grow"><div class="jt">{{ v.job.title }}</div><div class="meta">{{ v.job.company }}</div></div><a class="btn" href="{{ entry_base }}/{{ v.entry.id }}">{{ "View" if readonly else "Set deadline" }}</a></div>
+    {% endfor %}
     {% endif %}
   </section>
 
-  <section class="stack" aria-label="Month view" style="flex: 2 1 560px; min-width: 0">
-    <div class="head">
-      <h2 class="t2">{{ month.strftime("%B %Y") }}</h2>
-      <div class="rowx"><a class="btn" href="{{ base }}?m={{ prev }}">Previous</a><a class="btn" href="{{ base }}">Today</a><a class="btn" href="{{ base }}?m={{ next }}">Next</a></div>
+  <section class="panel panel--pad stack" aria-label="Month view">
+    <div class="rowx" style="justify-content: space-between">
+      <h2 class="t2" style="font-size: 20px">{{ month.strftime("%B %Y") }}</h2>
+      <div class="rowx"><a class="iconbtn" href="{{ base }}?m={{ prev }}" aria-label="Previous month">{{ icon("back", 18) }}</a><a class="btn" href="{{ base }}">Today</a><a class="iconbtn" href="{{ base }}?m={{ next }}" aria-label="Next month">{{ icon("chevron", 18) }}</a></div>
     </div>
     <div class="scroll">
       <div class="cal">

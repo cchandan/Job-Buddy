@@ -28,7 +28,7 @@
 
 {% if person and person.is_admin %}
 {% from "_macros.html" import icon %}
-<nav class="rail rail--admin" id="rail" aria-label="Admin">
+<nav class="rail rail--grouped rail--admin" id="rail" aria-label="Admin">
   <div class="rail-top">
     <button type="button" class="burger" id="burger" aria-expanded="false" aria-controls="rail-body" aria-label="Open the menu">
       <span class="ic-menu">{{ icon("menu", 24) }}</span><span class="ic-close">{{ icon("close", 24) }}</span>{% if nav and nav.needs %}<span class="burger-count" aria-hidden="true">{{ nav.needs }}</span>{% endif %}
@@ -63,18 +63,35 @@
   </div>
 </nav>
 {% elif person %}
-<nav class="rail" aria-label="Main">
-  <a href="/" class="mark">Job Buddy</a>
-  <div class="nav">
-    {% set links = [("home", "Home", "/"), ("board", "Job Board", "/board"), ("tracker", "Tracker", "/tracker"), ("calendar", "Calendar", "/calendar"), ("profile", "Profile", "/profile")] %}
-    {% for key, label, href in links %}
-    <a href="{{ href }}" {% if active == key %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
-    {% endfor %}
+{% from "_macros.html" import icon %}
+<nav class="rail rail--grouped" id="rail" aria-label="Main">
+  <div class="rail-top">
+    <button type="button" class="burger" id="burger" aria-expanded="false" aria-controls="rail-body" aria-label="Open the menu">
+      <span class="ic-menu">{{ icon("menu", 24) }}</span><span class="ic-close">{{ icon("close", 24) }}</span>{% if nav and nav.todo %}<span class="burger-count" aria-hidden="true">{{ nav.todo }}</span>{% endif %}
+    </button>
+    <a href="/" class="mark">Job Buddy</a>
   </div>
-  <div class="who">
-    <span class="av">{{ person.initial }}</span>
-    <div><div class="wn">{{ person.first_name }}</div><div class="wr">User</div></div>
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Sign out</button></form>
+  <div class="rail-body" id="rail-body">
+    <div class="nav">
+      <a href="/" {% if active == "home" %}class="on" aria-current="page"{% endif %}>{{ icon("home") }}<span class="grow">Home</span>{% if nav and nav.todo %}<span class="count" aria-label="{{ nav.todo }} thing{{ '' if nav.todo == 1 else 's' }} to do">{{ nav.todo }}</span>{% endif %}</a>
+    </div>
+    <div class="nav">
+      <span class="nav-label">Jobs</span>
+      <a href="/board" {% if active == "board" %}class="on" aria-current="page"{% endif %}>{{ icon("board") }}<span class="grow">Job Board</span>{% if nav and nav.new_jobs %}<span class="count count--quiet" aria-label="{{ nav.new_jobs }} new since you last looked">{{ nav.new_jobs }} new</span>{% endif %}</a>
+    </div>
+    <div class="nav">
+      <span class="nav-label">My applications</span>
+      <a href="/tracker" {% if active == "tracker" %}class="on" aria-current="page"{% endif %}>{{ icon("tracker") }}<span class="grow">Tracker</span>{% if nav and nav.assigned %}<span class="count" aria-label="{{ nav.assigned }} new job{{ '' if nav.assigned == 1 else 's' }} assigned to you">{{ nav.assigned }}</span>{% endif %}</a>
+      <a href="/calendar" {% if active == "calendar" %}class="on" aria-current="page"{% endif %}>{{ icon("calendar") }}<span class="grow">Calendar</span></a>
+    </div>
+    <div class="nav nav--end">
+      <a href="/profile" {% if active == "profile" %}class="on" aria-current="page"{% endif %}>{{ icon("profile") }}<span class="grow">Profile</span></a>
+    </div>
+    <div class="who">
+      <span class="av">{{ person.initial }}</span>
+      <div class="grow"><div class="wn">{{ person.first_name }}</div><div class="wr">User</div></div>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="signout" aria-label="Sign out" title="Sign out">{{ icon("signout") }}</button></form>
+    </div>
   </div>
 </nav>
 {% endif %}

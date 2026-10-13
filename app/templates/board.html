@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip, status_badge, listing_badge, meta, tags, csrf_field with context %}
+{% from "_macros.html" import chip, status_badge, listing_badge, meta, tags, csrf_field, icon with context %}
 {% block title %}Job Board{% endblock %}
 {% block content %}
 <div class="head">
@@ -10,51 +10,69 @@
   </div>
 </div>
 {% if board_age is not none and board_age > 3 %}
-<div class="notice"><span>The Job Board was last updated {{ board_age }} days ago, so some jobs may be out of date.{% if person.is_admin %} <a href="/admin/sync">Refresh jobs</a>{% endif %}</span></div>
+<div class="notice"><span>The Job Board was last updated {{ board_age }} days ago, so some jobs may be out of date.{% if person.is_admin %} <a href="/admin/refresh">Refresh jobs</a>{% endif %}</span></div>
 {% endif %}
 
-{% if has_profile %}
-<nav class="rowx" aria-label="Which jobs">
-  <a class="btn {{ 'btn--primary' if forme }}" href="/board">For you</a>
-  <a class="btn {{ 'btn--primary' if not forme }}" href="/board?view=all">Everything</a>
-</nav>
-{% endif %}
-<form method="get" action="/board" class="card rowx" style="align-items: flex-end; gap: 12px">
+<form method="get" action="/board" class="boardbar">
   {% if filters.view %}<input type="hidden" name="view" value="all">{% endif %}
-  <div class="field" style="flex: 2 1 220px"><label class="lab" for="q">Search</label><input id="q" name="q" type="search" class="input" placeholder="Title or company" value="{{ filters.q }}"></div>
-  <div class="field"><label class="lab" for="status">Listing status</label>
-    <select id="status" name="status" class="input">{% for value, label in (("open", "Open"), ("closing_soon", "Closing soon"), ("possibly_closed", "Possibly closed"), ("closed", "Closed"), ("all", "All, including closed")) %}<option value="{{ value }}" {{ 'selected' if filters.status == value }}>{{ label }}</option>{% endfor %}</select></div>
-  {% if person.is_admin %}<div class="field"><label class="lab" for="who">Searched for</label>
-    <select id="who" name="who" class="input"><option value="">Everyone</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if filters.who == u.id }}>{{ u.first_name }}</option>{% endfor %}</select></div>{% endif %}
-  <div class="field"><label class="lab" for="location">Location</label><input id="location" name="location" class="input" placeholder="Anywhere" value="{{ filters.location }}"></div>
-  <div class="field"><label class="lab" for="work_mode">Work mode</label>
-    <select id="work_mode" name="work_mode" class="input">{% for value, label in (("", "Any"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "Onsite")) %}<option value="{{ value }}" {{ 'selected' if filters.work_mode == value }}>{{ label }}</option>{% endfor %}</select></div>
-  <div class="field"><label class="lab" for="sponsorship">Sponsorship</label>
-    <select id="sponsorship" name="sponsorship" class="input">{% for value, label in (("", "Any"), ("sponsors", "Sponsors visas"), ("unclear", "Unclear"), ("no_sponsorship", "No sponsorship")) %}<option value="{{ value }}" {{ 'selected' if filters.sponsorship == value }}>{{ label }}</option>{% endfor %}</select></div>
-  <div class="field"><label class="lab" for="seniority">Level</label>
-    <select id="seniority" name="seniority" class="input">{% for value, label in (("", "Any"), ("graduate", "Graduate"), ("junior", "Junior"), ("mid", "Mid"), ("senior", "Senior")) %}<option value="{{ value }}" {{ 'selected' if filters.seniority == value }}>{{ label }}</option>{% endfor %}</select></div>
-  <div class="field"><label class="lab" for="sort">Sort by</label>
-    <select id="sort" name="sort" class="input">{% for value, label in (("best", "Best match"), ("deadline", "Deadline, soonest"), ("newest", "Recently added"), ("company", "Company")) %}<option value="{{ value }}" {{ 'selected' if filters.sort == value }}>{{ label }}</option>{% endfor %}</select></div>
-  <button class="btn btn--primary">Show</button>
+  <button class="vh">Search</button>
+  <div class="boardbar-row">
+    {% if has_profile %}
+    <div class="rowx" role="group" aria-label="Which jobs" style="gap: 6px">
+      <a class="tab {{ 'on' if forme }}" href="/board">For you</a>
+      <a class="tab {{ 'on' if not forme }}" href="/board?view=all">Everything</a>
+    </div>
+    {% endif %}
+    <div class="searchbox grow"><label class="vh" for="q">Search by title or company</label><input id="q" name="q" type="search" class="input" placeholder="Search by title or company" value="{{ filters.q }}">{{ icon("search", 18) }}</div>
+    <details class="filterpop" {% if chips %}data-active{% endif %}>
+      <summary class="btn">{{ icon("filter", 18) }}Filters{% if chips %} <span class="count">{{ chips|length }}</span>{% endif %}</summary>
+      <div class="filterpop-panel">
+        <div class="filtergrid">
+          <div class="field"><label class="lab" for="status">Listing status</label>
+            <select id="status" name="status" class="input">{% for value, label in (("open", "Open"), ("closing_soon", "Closing soon"), ("possibly_closed", "Possibly closed"), ("closed", "Closed"), ("all", "All, including closed")) %}<option value="{{ value }}" {{ 'selected' if filters.status == value }}>{{ label }}</option>{% endfor %}</select></div>
+          {% if person.is_admin %}<div class="field"><label class="lab" for="who">Searched for</label>
+            <select id="who" name="who" class="input"><option value="">Everyone</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if filters.who == u.id }}>{{ u.first_name }}</option>{% endfor %}</select></div>{% endif %}
+          <div class="field"><label class="lab" for="location">Location</label><input id="location" name="location" class="input" placeholder="Anywhere" value="{{ filters.location }}"></div>
+          <div class="field"><label class="lab" for="work_mode">Work mode</label>
+            <select id="work_mode" name="work_mode" class="input">{% for value, label in (("", "Any"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "Onsite")) %}<option value="{{ value }}" {{ 'selected' if filters.work_mode == value }}>{{ label }}</option>{% endfor %}</select></div>
+          <div class="field"><label class="lab" for="sponsorship">Sponsorship</label>
+            <select id="sponsorship" name="sponsorship" class="input">{% for value, label in (("", "Any"), ("sponsors", "Sponsors visas"), ("unclear", "Unclear"), ("no_sponsorship", "No sponsorship")) %}<option value="{{ value }}" {{ 'selected' if filters.sponsorship == value }}>{{ label }}</option>{% endfor %}</select></div>
+          <div class="field"><label class="lab" for="seniority">Level</label>
+            <select id="seniority" name="seniority" class="input">{% for value, label in (("", "Any"), ("graduate", "Graduate"), ("junior", "Junior"), ("mid", "Mid"), ("senior", "Senior")) %}<option value="{{ value }}" {{ 'selected' if filters.seniority == value }}>{{ label }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="rowx" style="justify-content: flex-end"><a class="btn btn--quiet" href="{{ '/board?view=all' if filters.view else '/board' }}">Clear filters</a><button class="btn btn--primary">Show jobs</button></div>
+      </div>
+    </details>
+  </div>
+  <div class="boardbar-row">
+    <div class="rowx" style="gap: 8px">
+      {% for words, url in chips %}<span class="fchip">{{ words }}<a href="{{ url }}" aria-label="Remove {{ words }}">{{ icon("close", 12) }}</a></span>{% endfor %}
+    </div>
+    <span class="grow"></span>
+    <label class="lab" for="sort">Sort by</label>
+    <select id="sort" name="sort" class="input input--sm" data-autosubmit>{% for value, label in (("best", "Best match"), ("deadline", "Deadline, soonest"), ("newest", "Recently added"), ("company", "Company")) %}<option value="{{ value }}" {{ 'selected' if filters.sort == value }}>{{ label }}</option>{% endfor %}</select>
+  </div>
 </form>
 
-<div class="stack">
+<section class="panel" aria-label="Jobs">
   {% for r in rows %}
   {% set job = r.job %}
-  <article class="card job {{ 'dim' if r.listing == 'closed' }}">
-    <div class="jmain">
-      <h2 class="jt"><a href="/board/{{ job.id }}">{{ job.title }}</a></h2>
+  <article class="jrow {{ 'dim' if r.listing == 'closed' }}">
+    <div class="jrow-main">
+      <div class="rowx" style="gap: 8px; align-items: baseline">
+        <h2 class="jt"><a class="plain" href="/board/{{ job.id }}">{{ job.title }}</a></h2>
+        {% if r.is_new %}<span class="badge b-new badge--sm">New</span>{% endif %}
+      </div>
       <div class="meta">{{ meta(job, mode=False) }}</div>
-      <div class="rowx">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{% if r.is_new %}<span class="badge b-new">New</span>{% endif %}{{ tags(job) }}{% if person.is_admin %}{% for pid in job.matched or [] %}{% if names.get(pid) %}<span class="tag">For {{ names[pid] }}</span>{% endif %}{% endfor %}{% endif %}{% if job.licensed_sponsor %}<span class="tag">Licensed sponsor</span>{% endif %}{% if job.citizenship_required %}<span class="tag">UK citizens only?</span>{% endif %}</div>
+      <div class="rowx" style="gap: 6px">{{ chip(r.chip) }}{{ listing_badge(r.listing) }}{{ tags(job) }}{% if person.is_admin %}{% for pid in job.matched or [] %}{% if names.get(pid) %}<span class="tag">For {{ names[pid] }}</span>{% endif %}{% endfor %}{% endif %}{% if job.licensed_sponsor %}<span class="tag">Licensed sponsor</span>{% endif %}{% if job.citizenship_required %}<span class="tag">UK citizens only?</span>{% endif %}</div>
       {% if job.sponsorship_quote and job.sponsorship != "unclear" %}<div class="quote">“{{ job.sponsorship_quote|truncate(180) }}”</div>{% endif %}
     </div>
-    <div class="jside" style="align-items: flex-end; justify-content: space-between">
-      <div class="by">Added to the Board {{ job.first_seen|when }}</div>
+    <div class="jrow-side">
       {% if person.is_admin %}
         {% if users %}
         <form method="post" action="/admin/assign" class="rowx">
           {{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="next" value="/board{{ '?' + query if query }}">
-          <label class="lab" for="to-{{ job.id }}" style="position: absolute; left: -9999px">Assign to</label>
+          <label class="vh" for="to-{{ job.id }}">Assign to</label>
           <select id="to-{{ job.id }}" name="user" class="input" style="width: auto">{% for u in users %}<option value="{{ u.id }}">{{ u.first_name }}</option>{% endfor %}</select>
           <button class="btn btn--primary">Assign</button>
         </form>
@@ -63,28 +81,30 @@
           {{ csrf_field() }}<input type="hidden" name="next" value="/board{{ '?' + query if query }}"><button class="btn">Move to bin</button>
         </form>
       {% elif r.entry %}
-        <div class="rowx">{{ status_badge(r.entry.status) }}<a class="btn" href="/tracker/{{ r.entry.id }}">In your Tracker</a></div>
+        <a class="btn" href="/tracker/{{ r.entry.id }}">{{ status_badge(r.entry.status) }}In your Tracker</a>
       {% else %}
         <form method="post" action="/board/{{ job.id }}/shortlist">{{ csrf_field() }}<input type="hidden" name="next" value="/board{{ '?' + query if query }}"><button class="btn btn--primary">Shortlist</button></form>
       {% endif %}
+      <span class="by">Added to the Board {{ job.first_seen|when }}</span>
     </div>
   </article>
   {% else %}
-  <div class="card empty">
+  <div class="empty-panel panel--pad">
     {% if total == 0 and not filters.q and not filters.location and filters.status == "open" %}
-    <h2 class="t2">No jobs yet</h2><p class="sub">An admin needs to run the first sync.</p>
+    <h2 class="t2">No jobs yet</h2><p class="sub">An admin needs to run the first refresh.</p>
     {% else %}
     <h2 class="t2">No jobs match those filters</h2><a class="btn" href="/board">Clear filters</a>
     {% endif %}
   </div>
   {% endfor %}
-</div>
-
-{% if pages > 1 %}
-<nav class="rowx" aria-label="Pages" style="justify-content: center">
-  {% if page > 1 %}<a class="btn" href="/board?{{ query }}&page={{ page - 1 }}">Previous</a>{% endif %}
-  <span class="sub">Page {{ page }} of {{ pages }}</span>
-  {% if page < pages %}<a class="btn" href="/board?{{ query }}&page={{ page + 1 }}">Next</a>{% endif %}
-</nav>
-{% endif %}
+  {% if pages > 1 %}
+  <nav class="panel-foot rowx" aria-label="Pages" style="justify-content: space-between">
+    <span class="by">Page {{ page }} of {{ pages }}</span>
+    <span class="rowx">
+      {% if page > 1 %}<a class="btn" href="/board?{{ query }}&page={{ page - 1 }}">Previous</a>{% endif %}
+      {% if page < pages %}<a class="btn" href="/board?{{ query }}&page={{ page + 1 }}">Next</a>{% endif %}
+    </span>
+  </nav>
+  {% endif %}
+</section>
 {% endblock %}

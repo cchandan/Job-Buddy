@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip as chip_m, status_badge, listing_badge, meta, tags, csrf_field with context %}
+{% from "_macros.html" import chip as chip_m, status_badge, listing_badge, meta, tags, csrf_field, icon with context %}
 {% block title %}{{ job.title }}{% endblock %}
 {% block content %}
-<a class="lnk" href="/board">Back to the Job Board</a>
+<a class="lnk minh backlink" href="/board">{{ icon("back", 16) }}Job Board</a>
 {% if job.binned_at %}<div class="notice" style="display: block"><strong>This job is in the bin, so it isn't on the Job Board any more.</strong> {{ job.bin_reason }}{% if person.is_admin %} <a class="lnk" href="/admin/bin">Open the Bin</a>{% endif %}</div>{% endif %}
 <div class="head">
   <div class="tight">
@@ -11,7 +11,7 @@
     <div class="rowx">{{ chip_m(chip) }}{{ listing_badge(listing) }}{{ tags(job) }}</div>
   </div>
   <div class="rowx">
-    {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View the advert</a>{% endif %}
+    {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View the advert{{ icon("external", 16) }}</a>{% endif %}
     {% if person.is_admin %}
       {% for u in users %}
       <form method="post" action="/admin/users/{{ u.id }}/assign">{{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="next" value="/board/{{ job.id }}"><button class="btn btn--primary">Assign to {{ u.first_name }}</button></form>
@@ -32,17 +32,19 @@
   </div>
 </div>
 
-<section class="card stack" aria-label="What the advert says">
-  <h2 class="t2">What the advert says</h2>
-  <div><span class="lab">Deadline</span>{% if job.deadline %}{{ job.deadline|dmy(True) }}{% if job.deadline_quote %} <span class="quote">“{{ job.deadline_quote }}”</span>{% endif %}{% else %}Not stated in the advert{% endif %}</div>
-  <div><span class="lab">Visa sponsorship</span>{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}{% if job.sponsorship_quote %} <span class="quote">“{{ job.sponsorship_quote }}”</span>{% endif %}</div>
-  <div><span class="lab">Work mode</span>{{ MODE_LABELS.get(job.work_mode, "Not stated") }}{% if job.work_mode_quote %} <span class="quote">“{{ job.work_mode_quote }}”</span>{% endif %}</div>
-  {% if job.required_skills %}<div><span class="lab">Skills asked for</span><div class="rowx">{% for s in job.required_skills %}<span class="tag">{{ s }}</span>{% endfor %}</div></div>{% endif %}
-  <div class="by">Added to the Job Board {{ job.first_seen|when }} · last found {{ job.last_seen|dmy(True) }}</div>
-</section>
+<div class="split">
+  <section class="panel panel--pad stack" aria-label="Job description">
+    <h2 class="t2">Job description</h2>
+    <div class="pre prose">{{ job.description }}</div>
+  </section>
 
-<section class="card stack" aria-label="Job description">
-  <h2 class="t2">Job description</h2>
-  <div class="pre">{{ job.description }}</div>
-</section>
+  <aside class="panel" aria-label="What the advert says">
+    <h2 class="t2 panel-head" style="display: block">What the advert says</h2>
+    <div class="fact"><div class="lab">Deadline</div><div class="strong">{% if job.deadline %}{{ job.deadline|dmy(True) }}{% else %}Not stated in the advert{% endif %}</div>{% if job.deadline and job.deadline_quote %}<div class="quote">“{{ job.deadline_quote }}”</div>{% endif %}</div>
+    <div class="fact"><div class="lab">Visa sponsorship</div><div class="strong">{{ SPONSOR_LABELS[job.sponsorship or 'unclear'] }}</div>{% if job.sponsorship_quote %}<div class="quote">“{{ job.sponsorship_quote }}”</div>{% endif %}</div>
+    <div class="fact"><div class="lab">Work mode</div><div class="strong">{{ MODE_LABELS.get(job.work_mode, "Not stated") }}</div>{% if job.work_mode_quote %}<div class="quote">“{{ job.work_mode_quote }}”</div>{% endif %}</div>
+    {% if job.required_skills %}<div class="fact"><div class="lab">Skills asked for</div><div class="rowx" style="gap: 6px">{% for sk in job.required_skills %}<span class="tag">{{ sk }}</span>{% endfor %}</div></div>{% endif %}
+    <div class="fact fact--foot by">Added to the Job Board {{ job.first_seen|when }} · last found {{ job.last_seen|dmy(True) }}</div>
+  </aside>
+</div>
 {% endblock %}

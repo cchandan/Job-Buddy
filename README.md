@@ -50,6 +50,10 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Refresh** and press **Re
 - **Publishing:** set `DATABASE_URL` to the live database, *or* (safer, no database password on your laptop) set `INGEST_URL` and the same `INGEST_TOKEN` here and on Render; then only the jobs the live site lacks are sent.
 - **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
+## The user pages
+
+People who use Job Buddy get the same layout: a sidebar with **Home**, **Job Board**, **Tracker**, **Calendar** and **Profile**, and small counts beside them (things to do, new jobs on the Board, new jobs assigned to you). On a phone the sidebar is the menu behind the button beside "Job Buddy". **Home** leads with **Do next** and a tappable strip of status counts. The **Job Board** has *For you* and *Everything* tabs, one search bar, a **Filters** button and removable chips for the filters in force. The **Tracker** is one row per job with the status changed in place, and a "Did you apply?" prompt above the list. The **Job page** puts what the advert says beside the description. **Profile** holds the CV, notifications and (folded away) the password.
+
 ## The admin pages
 
 The admin sidebar is grouped: **Today** (what needs you, at-a-glance tiles, people and recent activity), **People** (accounts, sign-up requests, and a Manage panel for passwords and removal), then under Jobs: **Job Board**, **Refresh** (status, schedule, sources, history and the computers that refresh), **Searches** (each person's keywords and places), **Bin** and **Snapshots**, and **Settings** (notifications, public sign-up, your own password). On a phone the sidebar is a menu behind the button beside "Job Buddy". The old Jobs sync and Refresher pages now lead to Refresh.

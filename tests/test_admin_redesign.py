@@ -12,7 +12,7 @@ def text(response):
 
 
 def sidebar(page):
-    return re.search(r'<nav class="rail rail--admin".*?</nav>', page, re.S).group(0)
+    return re.search(r'<nav class="rail rail--grouped[^"]*".*?</nav>', page, re.S).group(0)
 
 
 # ---------- the sidebar ----------
@@ -24,7 +24,7 @@ def test_the_admin_sidebar_is_grouped_and_a_user_keeps_theirs(people):
     assert "Jobs sync" not in nav and "Admin home" not in nav
     assert nav.index('nav-label">People') < nav.index('nav-label">Jobs') and nav.index(">Snapshots<") < nav.index(">Settings<")
     wife = signed_in("wife").get("/").text
-    assert 'class="rail rail--admin"' not in wife and 'href="/tracker"' in wife
+    assert "rail--admin" not in wife and 'href="/tracker"' in wife and "ADMIN" not in sidebar(wife)
 
 
 def test_the_current_page_is_marked_in_the_sidebar(people):

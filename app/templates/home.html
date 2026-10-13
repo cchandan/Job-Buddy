@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip, status_badge, meta, csrf_field, icon with context %}
+{% from "_macros.html" import chip, status_badge, meta, csrf_field, icon, flame with context %}
 {% block title %}Home{% endblock %}
 {% block content %}
 <div class="head">
@@ -9,6 +9,16 @@
   </div>
   <a class="btn" href="/board">Open the Job Board</a>
 </div>
+
+<section class="streak" aria-label="{{ streak.headline }}{{ '. ' ~ streak.nudge if streak.nudge }}">
+  <span class="streak-ico">{{ flame(28) }}</span>
+  <span class="streak-title">{{ streak.headline }}</span>
+  <span class="streak-sep" aria-hidden="true"></span>
+  <span class="streak-days" role="list">
+    {% for d in streak.week %}<span role="listitem" class="sday sday--{{ d.kind }}{{ ' sday--today' if d.today }}" aria-label="{{ d.label }}" title="{{ d.label }}">{% if d.kind != "f" %}{{ flame(27) }}{% endif %}</span>{% endfor %}
+  </span>
+  {% if streak.full %}<span class="streak-badge">{{ icon("check", 12) }}Full week</span>{% elif streak.nudge %}<span class="streak-nudge">{{ streak.nudge }}</span>{% endif %}
+</section>
 
 {% if getting_started %}
 <section class="panel" aria-label="Getting started">

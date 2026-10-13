@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from fastapi import Depends, HTTPException, Request
 
-from . import db, notify, vault
+from . import db, notify, streak, vault
 
 MAX_FAILURES = 5
 VISIT_MINUTES = 30  # a request after this long away counts as a new visit, and tells the admins
@@ -161,6 +161,11 @@ def current_person(request: Request, database=Depends(get_db)):
         database.commit()
         if new_visit:
             notify.visit(database, person, "is on Job Buddy")
+    if not person.is_admin:  # the login streak: one row a day, and a cookie note so most requests skip the database
+        day = streak.today().isoformat()
+        if request.session.get("vday") != day:
+            streak.record(database, person, streak.today())
+            request.session["vday"] = day
     return person
 
 

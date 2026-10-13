@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bootstrap, db, web
-from .routes import admin, auth as auth_routes, board, calendar, cv, home, ingest_api, tracker
+from . import auth, bootstrap, db, notify, web
+from .routes import admin, auth as auth_routes, board, calendar, cv, home, ingest_api, notifications, tracker
 
 log = logging.getLogger("jobbuddy")
 
@@ -20,6 +20,7 @@ log = logging.getLogger("jobbuddy")
 async def lifespan(app):
     db.init_db()
     bootstrap.ensure_admin()
+    notify.start_scheduler()
     yield
 
 
@@ -92,5 +93,5 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for module in (auth_routes, home, board, tracker, cv, calendar, admin, ingest_api):
+for module in (auth_routes, home, board, tracker, cv, calendar, admin, ingest_api, notifications):
     app.include_router(module.router)

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, runlog, sources, summary, tracking, web
+from .. import ai, auth, db, deadlines, ingest, notify, runlog, sources, summary, tracking, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -73,6 +73,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
         cv = database.get(db.CV, account.id)
         if cv is not None:
             database.delete(cv)
+        database.query(db.PushSubscription).filter(db.PushSubscription.person_id == account.id).delete()
         database.flush()
         for model, column in ((db.TrackerEntry, "added_by_id"), (db.TailoredCV, "reviewer_id"), (db.SyncRun, "person_id")):
             database.query(model).filter(getattr(model, column) == account.id).update({column: None})
@@ -174,6 +175,8 @@ async def assign(user_id: int, request: Request, database=Depends(auth.get_db), 
         web.flash(request, f"{user.first_name}'s Tracker is full.", "bad")
         return web.redirect(back)
     title = db.entry_job(entry).title
+    if created:
+        notify.notify(user.id, f"New job from {person.first_name}", f"{title} · {db.entry_job(entry).company}", "/tracker", tag="assigned")
     web.flash(request, f"Assigned {title} to {user.first_name}." if created else f"{user.first_name} already has {title}.")
     return web.redirect(back)
 
@@ -226,6 +229,8 @@ def review_decide(entry_id: int, request: Request, database=Depends(auth.get_db)
     cv.status = "approved" if decision == "approve" else "changes_requested"
     cv.reviewer_id, cv.review_comment, cv.reviewed_at, cv.review_seen = person.id, comment, db.utcnow(), False
     database.commit()
+    notify.notify(entry.person_id, "Your CV was approved" if decision == "approve" else "Changes requested on your CV",
+                  db.entry_job(entry).title, f"/tracker/{entry.id}/cv", tag=f"review-{entry.id}")
     web.flash(request, f"{'Approved' if decision == 'approve' else 'Changes requested'}. {entry.person.first_name} will see it on their Home page.")
     return web.redirect("/admin/review")
 

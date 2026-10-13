@@ -207,6 +207,17 @@ class AppSetting(Base):
     value = Column(Text, default="")
 
 
+class PushSubscription(Base):
+    """One browser a person has turned notifications on in. Dropped when the push service says it is gone."""
+    __tablename__ = "push_subscriptions"
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint = Column(String(1000), nullable=False, unique=True)
+    p256dh = Column(String(200), nullable=False)
+    auth = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class FetchState(Base):
     """When each (source, search) last succeeded, so the next fetch asks only for what is newer."""
     __tablename__ = "fetch_state"

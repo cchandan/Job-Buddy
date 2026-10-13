@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
-from .. import ai, auth, cv_pdf, db, summary, tailoring, web
+from .. import ai, auth, cv_pdf, db, notify, summary, tailoring, web
 from .tracker import users_only
 
 router = APIRouter()
@@ -143,6 +143,10 @@ def save_tailored(entry_id: int, request: Request, database=Depends(auth.get_db)
     else:
         web.flash(request, "Saved.")
     database.commit()
+    if then == "send":
+        for admin in database.query(db.Person).filter(db.Person.role == "admin"):
+            notify.notify(admin.id, "CV to review", f"{person.first_name} sent a CV for {db.entry_job(entry).title}",
+                          f"/admin/review/{entry.id}", tag=f"review-{entry.id}")
     return web.redirect(f"/tracker/{entry.id}/cv")
 
 

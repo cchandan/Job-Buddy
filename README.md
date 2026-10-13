@@ -47,6 +47,14 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 - **Publishing:** set `DATABASE_URL` to the live database, *or* (safer, no database password on your laptop) set `INGEST_URL` and the same `INGEST_TOKEN` here and on Render; then only the jobs the live site lacks are sent.
 - **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
+## Browser notifications
+Chrome pop-ups, with nothing to install: deadlines in the next 3 days (one message at 8am UK time), a job an admin assigns, a CV approved or sent back, and (for admins) a CV sent for review. Free: the browser's own push service does the delivery.
+1. Run `python scripts/make_vapid_keys.py` once and put `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (`mailto:` your email) in Render's environment (and `.env` locally). Redeploy.
+2. Each person opens **Profile** (admins: **Admin home**) in Chrome and presses **Turn on notifications**, then **Send a test**. Do it once in each browser or phone you use; it needs a normal window, not Incognito.
+- The 8am message is sent by the app itself, so the Render service must stay awake (a paid plan). On a free plan that sleeps, the assignment and review messages still work but the daily deadline message can be missed.
+- If you ever make a new key pair, everyone has to press **Turn on notifications** again.
+- Messages carry only a headline and a job title, never CV text. Without the keys the feature is simply off.
+
 ## Deploy
 Create a Render web service from `render.yaml` and set the settings above. Use the Supabase **pooled** connection string for `DATABASE_URL`. Each deploy runs `alembic upgrade head`, which creates or updates the tables. Then run `python scripts/create_admin.py` once against the live database to make the first admin account.
 

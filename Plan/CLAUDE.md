@@ -35,3 +35,14 @@ Project rules:
 * Do not add features outside `spec.md` unless explicitly asked. Project Ideas, Network, Skill Gaps, This Week, dream jobs and match ranking are removed; do not bring them back.
 * Keep changes small and easy for a non-technical user to understand.
 * Before finishing a slice, run the tests and check the acceptance criteria.
+
+## Git workflow for features
+The owner reviews everything at once and merges at home, and must be able to roll back any one feature.
+* One feature = one branch = one pull request. Never mix two features in a branch.
+* Features are a stack, in the order they were asked for: each new feature branches from the top of the stack (not from `main`), and its PR is opened against the previous feature's branch. This keeps each PR's diff to its own feature and keeps database migrations in one numbered chain (`0001`, `0002`, ...), because two migrations with the same parent break Alembic.
+* PR titles start with the position: `[2/4] Short name`. Each PR body says which PR it is built on ("Merge after #N"), what it changes, how to turn it on, how it was tested, and how to roll it back.
+* The owner merges in order, bottom to top, with **Create a merge commit** (not Squash: squashing breaks the PRs stacked above). GitHub then retargets the next PR to `main` once the merged branch is deleted.
+* Rollback = the **Revert** button on that feature's merged PR. If several are reverted, revert the newest first. Migrations only add tables or columns and never drop data, so a revert loses nothing.
+* A change that does not touch the stack (docs, a standalone fix) branches from `main` and is its own PR, mergeable in any order.
+* Never push to `main` directly, never merge a PR, and never force-push a branch that already has an open PR. Branches with no PR yet may be rebased to keep the stack tidy.
+* Every branch must pass the tests on its own. The one known failure (`test_sync.py::test_for_you_shows_only_your_matches_and_hides_citizenship_only_jobs`) also fails on `main` and is not caused by new work.

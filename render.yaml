@@ -6,6 +6,9 @@ services:
     buildCommand: pip install -r requirements.txt && alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
     healthCheckPath: /health
+    buildFilter:
+      ignoredPaths:
+        - refresher/**  # the home refresher is a separate download; changing it does not redeploy the site
     envVars:
       - key: DATABASE_URL
         sync: false

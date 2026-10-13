@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, bootstrap, db, notify, web
-from .routes import admin, auth as auth_routes, board, calendar, cv, home, ingest_api, notifications, signup, tracker
+from .routes import admin, auth as auth_routes, board, calendar, cv, home, ingest_api, notifications, refresher_api, signup, tracker
 
 log = logging.getLogger("jobbuddy")
 
@@ -93,5 +93,5 @@ def health():
     return JSONResponse({"ok": True})
 
 
-for module in (auth_routes, home, board, tracker, cv, calendar, admin, ingest_api, notifications, signup):
+for module in (auth_routes, home, board, tracker, cv, calendar, admin, ingest_api, notifications, refresher_api, signup):
     app.include_router(module.router)

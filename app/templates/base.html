@@ -31,7 +31,7 @@
   <a href="/" class="mark">Job Buddy</a>
   <div class="nav">
     {% if person.is_admin %}
-      {% set links = [("admin", "Admin home", "/admin"), ("board", "Job Board", "/board"), ("sync", "Jobs sync", "/admin/sync"), ("bin", "Bin", "/admin/bin"), ("snapshots", "Snapshots", "/admin/snapshots")] %}
+      {% set links = [("admin", "Admin home", "/admin"), ("board", "Job Board", "/board"), ("sync", "Jobs sync", "/admin/sync"), ("bin", "Bin", "/admin/bin"), ("snapshots", "Snapshots", "/admin/snapshots"), ("refresher", "Refresher", "/admin/refresher")] %}
     {% else %}
       {% set links = [("home", "Home", "/"), ("board", "Job Board", "/board"), ("tracker", "Tracker", "/tracker"), ("calendar", "Calendar", "/calendar"), ("profile", "Profile", "/profile")] %}
     {% endif %}

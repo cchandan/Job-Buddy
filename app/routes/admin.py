@@ -4,7 +4,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, jobbin, notify, push, runlog, snapshots, sources, summary, tracking, vault, web
+from .. import ai, auth, db, deadlines, ingest, jobbin, notify, push, refreshers, runlog, snapshots, sources, summary, tracking, vault, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -367,6 +367,78 @@ def snapshot_download(snapshot_id: int, database=Depends(auth.get_db)):
         raise HTTPException(status_code=404, detail="That snapshot no longer exists.")
     return Response(snap.data, media_type="application/gzip",
                     headers={"Content-Disposition": f'attachment; filename="job-board-snapshot-{snap.id}.json.gz"'})
+
+
+# ---------- the refresher ----------
+
+@router.get("/refresher")
+def refresher_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    cards = [{"row": r, "health": refreshers.health(r), "status": r.status or {}}
+             for r in database.query(db.Refresher).order_by(db.Refresher.name).all()]
+    return web.page(request, "admin_refresher.html", person, "refresher", cards=cards, schedule=refreshers.schedule(database),
+                    expected=refreshers.VERSION, runs=runlog.recent(database, 5), new_refresher=request.session.pop("new_refresher", None))
+
+
+@router.post("/refresher")
+def refresher_add(request: Request, database=Depends(auth.get_db), name: str = Form("")):
+    name = name.strip()[:60]
+    if not name:
+        web.flash(request, "Give the computer a name, for example “Optiplex at home”.", "bad")
+    else:
+        _, token = refreshers.create(database, name)
+        # Shown once on the next page, then gone: only a hash of the secret is kept.
+        request.session["new_refresher"] = {"name": name, "code": refreshers.connection_code(str(request.base_url), token, name)}
+    return web.redirect("/admin/refresher")
+
+
+@router.post("/refresher/schedule")
+def refresher_schedule(request: Request, database=Depends(auth.get_db), time: str = Form(""), enabled: str = Form("")):
+    when = refreshers.valid_time(time)
+    if when is None:
+        web.flash(request, "Please give the time like 07:30.", "bad")
+    else:
+        refreshers.save_schedule(database, when, bool(enabled))
+        web.flash(request, f"Saved. The refresher will run every morning at {when} (UK time)." if enabled
+                  else "Saved. The morning refresh is off; you can still use Run now.")
+    return web.redirect("/admin/refresher")
+
+
+def _refresher(database, refresher_id):
+    row = database.get(db.Refresher, refresher_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="We couldn't find that refresher.")
+    return row
+
+
+@router.post("/refresher/{refresher_id}/run")
+def refresher_run(refresher_id: int, request: Request, database=Depends(auth.get_db)):
+    row = _refresher(database, refresher_id)
+    if row.state == "running":
+        web.flash(request, f"{row.name} is already refreshing.", "bad")
+    else:
+        row.pending_command = "run_now"
+        database.commit()
+        web.flash(request, f"Asked {row.name} to refresh now. It picks this up within a minute.")
+    return web.redirect("/admin/refresher")
+
+
+@router.post("/refresher/{refresher_id}/stop")
+def refresher_stop(refresher_id: int, request: Request, database=Depends(auth.get_db)):
+    row = _refresher(database, refresher_id)
+    row.pending_command = "stop"
+    database.commit()
+    web.flash(request, f"Asked {row.name} to stop after its current step. Nothing found so far is lost.")
+    return web.redirect("/admin/refresher")
+
+
+@router.post("/refresher/{refresher_id}/remove")
+def refresher_remove(refresher_id: int, request: Request, database=Depends(auth.get_db)):
+    row = _refresher(database, refresher_id)
+    name = row.name
+    database.delete(row)
+    database.commit()
+    web.flash(request, f"Removed {name}. Its secret no longer works, so it can't report or publish any more.")
+    return web.redirect("/admin/refresher")
 
 
 # ---------- jobs sync ----------

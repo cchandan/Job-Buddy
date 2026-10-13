@@ -130,7 +130,7 @@ def csrf_token(request):
 
 async def check_csrf(request: Request):
     """Every form that changes data is a POST carrying this token."""
-    if request.method != "POST" or request.url.path.startswith("/api/ingest/"):
+    if request.method != "POST" or request.url.path.startswith(("/api/ingest/", "/api/refresher/")):
         return  # the laptop's API has no cookies to forge: it needs the secret token instead
     form = await request.form()
     sent, want = str(form.get("csrf") or ""), request.session.get("csrf") or ""

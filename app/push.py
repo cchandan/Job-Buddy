@@ -70,6 +70,9 @@ def job_dict(job, usernames=None):
     out = {f: getattr(job, f) for f in db.JOB_FIELDS}
     out["matched"] = sorted(usernames[i] for i in (job.matched or []) if usernames and i in usernames)
     out["deadline"] = job.deadline.isoformat() if job.deadline else None
+    found = getattr(job, "found_by", None) or {}
+    if usernames and found:  # which search found it travels as usernames, like `matched`
+        out["found_by"] = {usernames[int(pid)]: terms for pid, terms in found.items() if int(pid) in usernames}
     binned = getattr(job, "binned_at", None)
     out["binned_at"] = binned.isoformat() if binned else None
     out["bin_reason"] = getattr(job, "bin_reason", "") or ""

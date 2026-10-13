@@ -146,6 +146,20 @@ class BoardSnapshot(Base):
     created_by = relationship(Person)
 
 
+class Refresher(Base):
+    """A computer that refreshes the Job Board for us (see refresher/). It only ever calls the website; the website never calls it."""
+    __tablename__ = "refreshers"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(60), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)  # sha256 of its secret; the secret is shown once, when it is added
+    created_at = Column(DateTime, default=utcnow)
+    last_seen = Column(DateTime)
+    version = Column(String(20), default="")
+    state = Column(String(12), default="")       # idle / running / error, as it last reported
+    status = Column(JSON)                         # everything it last reported (phase, progress, last run, next run)
+    pending_command = Column(String(12), default="")  # "run_now" or "stop": handed over at its next check-in, then cleared
+
+
 class StagedJob(Base):
     """Fetched jobs waiting for Sync. `data` has the same fields as a Job."""
     __tablename__ = "staged_jobs"
@@ -332,7 +346,7 @@ def job_row(raw):
 
 def seed_jobs_if_empty(db):
     """A fresh database starts with the jobs in data/jobs_tagged.json. Returns how many were added."""
-    if db.query(Job.id).first() is not None or not JOBS_FILE.exists():
+    if db.query(Job.id).first() is not None or not JOBS_FILE.exists() or os.getenv("JOBBUDDY_NO_SEED"):  # a refresher starts empty
         return 0
     from . import tagging  # here, not at the top: tagging needs this module
     rows = json.loads(JOBS_FILE.read_text())

@@ -1,7 +1,7 @@
 """Sign in, sign out, change password."""
 from fastapi import APIRouter, Depends, Form, Request
 
-from .. import auth, db, web
+from .. import auth, db, notify, web
 
 router = APIRouter()
 
@@ -29,6 +29,7 @@ def login(request: Request, database=Depends(auth.get_db), username: str = Form(
         return web.page(request, "login.html", None, status_code=401, next=web.safe_next(next, ""), error=error,
                         username=username[:60])
     auth.start_session(request, person)
+    notify.visit(database, person, "signed in")
     return web.redirect(web.safe_next(next, "/"))
 
 

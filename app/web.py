@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, deadlines
+from . import auth, db, deadlines, notify
 
 HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
@@ -64,7 +64,7 @@ def added_by(entry, viewer):
 templates.env.globals.update(
     STATUS_LABELS=STATUS_LABELS, MODE_LABELS=MODE_LABELS, SPONSOR_LABELS=SPONSOR_LABELS,
     LISTING_LABELS=deadlines.LISTING_LABELS, STATUSES=db.STATUSES, salary=salary, added_by=added_by,
-    chip_for=deadlines.chip, listing_status=deadlines.listing_status)
+    chip_for=deadlines.chip, listing_status=deadlines.listing_status, push_ready=notify.configured, push_key=notify.public_key)
 templates.env.filters.update(dmy=dmy, when=when, money=money)
 
 

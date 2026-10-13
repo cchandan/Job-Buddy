@@ -49,7 +49,7 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 
 ## Browser notifications
 Chrome pop-ups, with nothing to install. Free: the browser's own push service does the delivery.
-- **Admins** are told when someone signs in or comes back to the site, and when a job is added to, changed in or removed from a Tracker (status, deadline, notes, edits, a CV uploaded or deleted). You are never told about your own actions.
+- **Admins** are told when someone signs in or comes back to the site, when a job is added or shortlisted in a Tracker (or assigned by another admin), and when its status changes (Applied, Interviewing, Rejected and so on). Nothing else is reported, and you are never told about your own actions.
 - **Users** are told about deadlines in the next 3 days (one message at 8am UK time, only for jobs not yet applied for), a job an admin assigns them, and, if they haven't been on for 3 days, a nudge (repeated every 3 days).
 
 Set up:

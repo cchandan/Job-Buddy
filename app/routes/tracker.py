@@ -127,7 +127,6 @@ async def edit_submit(entry_id: int, request: Request, database=Depends(auth.get
     entry.details, entry.deadline_override = details, deadline
     entry.notes = str(form.get("notes") or "").strip()[:4000]
     database.commit()
-    notify.tracker_change(database, person, entry, "edited a job")
     web.flash(request, "Saved.")
     return web.redirect(f"/tracker/{entry.id}")
 
@@ -152,7 +151,6 @@ def set_deadline(entry_id: int, request: Request, database=Depends(auth.get_db),
         web.flash(request, "That date didn't look right, so the deadline wasn't changed.", "bad")
         return web.redirect(web.safe_next(next, f"/tracker/{entry.id}"))
     database.commit()
-    notify.tracker_change(database, person, entry, "changed a deadline")
     web.flash(request, "Deadline saved." if entry.deadline_override else "Your own deadline was cleared.")
     return web.redirect(web.safe_next(next, f"/tracker/{entry.id}"))
 
@@ -162,7 +160,6 @@ def set_notes(entry_id: int, request: Request, database=Depends(auth.get_db), pe
     entry = auth.own_entry(database, person, entry_id)
     entry.notes = notes.strip()[:4000]
     database.commit()
-    notify.tracker_change(database, person, entry, "updated their notes on a job")
     web.flash(request, "Notes saved.")
     return web.redirect(f"/tracker/{entry.id}")
 
@@ -171,7 +168,6 @@ def set_notes(entry_id: int, request: Request, database=Depends(auth.get_db), pe
 def remove(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only)):
     entry = auth.own_entry(database, person, entry_id)
     title = db.entry_job(entry).title
-    notify.tracker_change(database, person, entry, "removed a job from their Tracker", gone=True)
     database.delete(entry)
     database.commit()
     web.flash(request, f"Removed {title} from your Tracker.")
@@ -188,7 +184,6 @@ def apply(entry_id: int, request: Request, database=Depends(auth.get_db), person
     if entry.status == "shortlisted":
         entry.apply_clicked_at = db.utcnow()
         database.commit()
-        notify.tracker_change(database, person, entry, "opened a job's advert to apply")
     return web.redirect(url)
 
 

@@ -1,6 +1,6 @@
 """Browser notifications (Web Push) straight to Chrome.
 
-Admins hear when someone signs in or opens the site, and when a job is added to or changed in a Tracker.
+Admins hear when someone signs in or opens the site, when a job is added to a Tracker, and when its status changes.
 Users hear about deadlines coming up, jobs assigned to them, and if they have not been on for 3 days.
 
 Nothing to install: a person turns notifications on once from their Profile (Admin home for admins) and their
@@ -135,12 +135,11 @@ def visit(database, person, what):
 
 
 @_never_raises
-def tracker_change(database, actor, entry, what, gone=False):
-    """A job was added to or changed in someone's Tracker. Same tag per job, so rapid edits replace each other."""
+def tracker_change(database, actor, entry, what):
+    """A job was added to someone's Tracker, or its status changed. Same tag per job, so quick changes replace each other."""
     job = db.entry_job(entry)
-    owner = entry.person
-    url = f"/admin/users/{entry.person_id}/tracker" if gone else f"/admin/users/{entry.person_id}/entry/{entry.id}"
-    admins(database, actor, f"{owner.first_name} {what}", f"{job.title} · {job.company}", url, tag=f"entry-{entry.id}")
+    admins(database, actor, f"{entry.person.first_name} {what}", f"{job.title} · {job.company}",
+           f"/admin/users/{entry.person_id}/entry/{entry.id}", tag=f"entry-{entry.id}")
 
 
 # ---------- the daily deadline message ----------

@@ -142,7 +142,7 @@ def test_every_admin_but_the_actor_is_told(people, sent):
     assert {p["title"] for _, p in sent} == {"Wife signed in"}
 
 
-def test_tracker_changes_reach_the_admin(people, sent):
+def test_only_new_jobs_and_status_changes_reach_the_admin(people, sent):
     make_job("j1", title="Graduate Data Analyst", company="Kite")
     dad = signed_in("dad")
     subscribe(dad, "dad1")
@@ -152,22 +152,18 @@ def test_tracker_changes_reach_the_admin(people, sent):
     with db.SessionLocal() as s:
         entry_id = s.query(db.TrackerEntry).one().id
     wife.post(f"/tracker/{entry_id}/status", {"status": "applied"})
-    wife.post(f"/tracker/{entry_id}/deadline", {"deadline": "2026-11-01"})
-    wife.post(f"/tracker/{entry_id}/notes", {"notes": "Phoned them"})
+    wife.post(f"/tracker/{entry_id}/status", {"status": "rejected"})
     wife.post("/tracker/new", {"title": "By hand", "company": "Acme"})
-    assert titles(sent) == ["Wife added a job to their Tracker", "Wife moved a job to Applied", "Wife changed a deadline",
-                            "Wife updated their notes on a job", "Wife added a job to their Tracker"]
+    assert titles(sent) == ["Wife added a job to their Tracker", "Wife moved a job to Applied", "Wife moved a job to Rejected",
+                            "Wife added a job to their Tracker"]
     assert all(pid == people["dad"] for pid, _ in sent)
     first = sent[0][1]
     assert "Graduate Data Analyst · Kite" in first["body"] and first["url"] == f"/admin/users/{people['wife']}/entry/{entry_id}"
     sent.clear()
-    wife.post(f"/tracker/{entry_id}/status", {"status": "applied"})  # nothing changed, nothing sent
-    wife.post(f"/tracker/{entry_id}/remove")
-    assert titles(sent) == ["Wife removed a job from their Tracker"]
-    assert sent[0][1]["url"] == f"/admin/users/{people['wife']}/tracker"  # the job is gone, so open their Tracker
+    wife.post(f"/tracker/{entry_id}/status", {"status": "rejected"})  # nothing changed, nothing sent
 
 
-def test_opening_an_advert_to_apply_is_reported_once(people, sent):
+def test_the_chatty_changes_stay_quiet(people, sent):
     make_job("j1")
     dad = signed_in("dad")
     subscribe(dad, "dad1")
@@ -176,20 +172,19 @@ def test_opening_an_advert_to_apply_is_reported_once(people, sent):
     with db.SessionLocal() as s:
         entry_id = s.query(db.TrackerEntry).one().id
     sent.clear()
-    assert wife.post(f"/tracker/{entry_id}/apply").status_code == 303
-    assert titles(sent) == ["Wife opened a job's advert to apply"]
-    wife.post(f"/tracker/{entry_id}/applied", {"answer": "yes"})
-    assert titles(sent)[-1] == "Wife moved a job to Applied"
-
-
-def test_cv_upload_and_delete_reach_the_admin(people, sent):
-    dad = signed_in("dad")
-    subscribe(dad, "dad1")
-    wife = signed_in("wife")
-    sent.clear()
+    wife.post(f"/tracker/{entry_id}/deadline", {"deadline": "2026-11-01"})
+    wife.post(f"/tracker/{entry_id}/notes", {"notes": "Phoned them"})
+    wife.post(f"/tracker/{entry_id}/apply")  # opening the advert
     wife.post("/profile/cv", {"cv_text": "Jane Example. Software tester at Acme 2022 to 2025. Skills: Python, SQL. " * 3})
     wife.post("/profile/cv/delete")
-    assert titles(sent) == ["Wife uploaded their CV", "Wife deleted their CV"]
+    wife.post(f"/tracker/{entry_id}/remove")
+    assert sent == []
+    wife.post("/board/j1/shortlist")
+    with db.SessionLocal() as s:
+        entry_id = s.query(db.TrackerEntry).one().id
+    sent.clear()
+    wife.post(f"/tracker/{entry_id}/applied", {"answer": "yes"})  # the "Did you apply?" yes is a status change
+    assert titles(sent) == ["Wife moved a job to Applied"]
 
 
 def test_assigning_tells_the_user_and_the_other_admins(people, sent):

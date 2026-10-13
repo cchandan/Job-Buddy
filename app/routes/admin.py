@@ -273,9 +273,24 @@ def bin_page(request: Request, database=Depends(auth.get_db), person=Depends(aut
         query = query.filter(db.Job.bin_reason.like("Expired:%"))
     elif kind == "relevance":
         query = query.filter(db.Job.bin_reason.like("No longer relevant%"))
+    elif kind == "manual":
+        query = query.filter(db.Job.bin_reason.like(jobbin.MANUAL_PREFIX + "%"))
     return web.page(request, "admin_bin.html", person, "bin", cand=jobbin.candidates(database, web.today()), kind=kind,
                     total=query.count(), rows=query.order_by(db.Job.binned_at.desc(), db.Job.title).limit(300).all(),
                     all_count=jobbin.count(database))
+
+
+@router.post("/bin/add/{job_id}")
+def bin_add(job_id: str, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
+            reason: str = Form(""), next: str = Form("/board")):
+    """Bin one advert by hand. It leaves the Job Board; anyone tracking it keeps it in their Tracker."""
+    job = database.get(db.Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="We couldn't find that job.")
+    if job.binned_at is None:
+        jobbin.bin_by_hand(database, job, person, reason)
+        web.flash(request, f"Moved “{job.title}” to the bin. You can restore it from Admin > Bin. Publish to send this to the live site.")
+    return web.redirect(web.safe_next(next, "/board"))
 
 
 @router.post("/bin/tidy")

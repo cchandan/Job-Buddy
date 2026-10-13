@@ -59,6 +59,9 @@
           <button class="btn btn--primary">Assign</button>
         </form>
         {% endif %}
+        <form method="post" action="/admin/bin/add/{{ job.id }}" data-confirm="Move this advert to the bin? It leaves the Job Board. Anyone tracking it keeps it in their Tracker, and you can restore it from Admin > Bin.">
+          {{ csrf_field() }}<input type="hidden" name="next" value="/board{{ '?' + query if query }}"><button class="btn">Move to bin</button>
+        </form>
       {% elif r.entry %}
         <div class="rowx">{{ status_badge(r.entry.status) }}<a class="btn" href="/tracker/{{ r.entry.id }}">In your Tracker</a></div>
       {% else %}

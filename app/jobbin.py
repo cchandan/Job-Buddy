@@ -75,6 +75,23 @@ def candidates(database, today):
     return out
 
 
+MANUAL_PREFIX = "Binned by hand"  # an advert an admin binned themselves: only an admin takes it out again
+
+
+def is_manual(job):
+    return (job.bin_reason or "").startswith(MANUAL_PREFIX)
+
+
+def bin_by_hand(database, job, by, reason=""):
+    """An admin bins one advert. It stays binned even if a scrape finds the advert again, until an admin restores it.
+    Anyone tracking it keeps it in their Tracker."""
+    note = (reason or "").strip()[:120]
+    job.binned_at = db.utcnow()
+    job.bin_reason = f"{MANUAL_PREFIX} by {by.first_name}" + (f": {note}" if note else "")
+    job.bin_kept = False
+    database.commit()
+
+
 def bin_jobs(database, pairs, now=None):
     now = now or db.utcnow()
     for job, reason in pairs:

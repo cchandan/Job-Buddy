@@ -16,6 +16,14 @@
       {% for u in users %}
       <form method="post" action="/admin/users/{{ u.id }}/assign">{{ csrf_field() }}<input type="hidden" name="how" value="board"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="next" value="/board/{{ job.id }}"><button class="btn btn--primary">Assign to {{ u.first_name }}</button></form>
       {% endfor %}
+      {% if not job.binned_at %}
+      <form method="post" action="/admin/bin/add/{{ job.id }}" class="rowx" data-confirm="Move this advert to the bin? It leaves the Job Board. Anyone tracking it keeps it in their Tracker, and you can restore it from Admin > Bin.">
+        {{ csrf_field() }}<input type="hidden" name="next" value="/board">
+        <label class="lab" for="why" style="position: absolute; left: -9999px">Why (optional)</label>
+        <input id="why" name="reason" class="input" maxlength="120" placeholder="Why? (optional)" style="width: 200px">
+        <button class="btn">Move to bin</button>
+      </form>
+      {% endif %}
     {% elif entry %}
       {{ status_badge(entry.status) }}<a class="btn btn--primary" href="/tracker/{{ entry.id }}">In your Tracker</a>
     {% else %}

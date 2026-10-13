@@ -190,8 +190,8 @@ def _upsert(database, raw, tags, now):
     if "binned_at" in raw:  # the laptop is telling the live site what is in the bin
         for field, value in _bin_fields(raw).items():
             setattr(job, field, value)
-    else:  # found again by a search: it is open, and it matters, so it comes out of the bin
-        job.binned_at, job.bin_reason = None, ""
+    elif not jobbin.is_manual(job):  # found again by a search: it is open, and it matters, so it comes out of the bin
+        job.binned_at, job.bin_reason = None, ""  # (unless an admin binned it by hand: that stays until an admin restores it)
     job.last_seen, job.closed_at, job.close_reason = now, None, ""  # found again: it is open
     return "updated"
 
@@ -480,7 +480,9 @@ def _save(run, raws, backends, state, totals):
         ids = [r["id"] for r in seen]
         for i in range(0, len(ids), 500):
             s.query(db.Job).filter(db.Job.id.in_(ids[i:i + 500])).update(
-                {"last_seen": now, "closed_at": None, "close_reason": "", "binned_at": None, "bin_reason": ""}, synchronize_session=False)
+                {"last_seen": now, "closed_at": None, "close_reason": ""}, synchronize_session=False)
+            s.query(db.Job).filter(db.Job.id.in_(ids[i:i + 500]), ~db.Job.bin_reason.like(jobbin.MANUAL_PREFIX + "%")).update(
+                {"binned_at": None, "bin_reason": ""}, synchronize_session=False)  # found again: out of the bin, but never a hand-binned one
         s.commit()
     totals["new"] += new
     totals["updated"] += updated

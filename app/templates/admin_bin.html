@@ -36,6 +36,7 @@
       <a class="btn {{ 'btn--primary' if not kind }}" href="/admin/bin">All</a>
       <a class="btn {{ 'btn--primary' if kind == 'expired' }}" href="/admin/bin?kind=expired">Expired</a>
       <a class="btn {{ 'btn--primary' if kind == 'relevance' }}" href="/admin/bin?kind=relevance">No longer relevant</a>
+      <a class="btn {{ 'btn--primary' if kind == 'manual' }}" href="/admin/bin?kind=manual">Binned by hand</a>
     </div>
   </div>
   {% if rows %}
@@ -49,7 +50,7 @@
         <td>{{ job.bin_reason }}</td><td>{{ job.binned_at|when }}</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if total > rows|length %}<p class="by">Showing the latest {{ rows|length }} of {{ total }}.</p>{% endif %}
-    <div class="rowx"><button class="btn">Restore selected</button><span class="by">Restored jobs go back on the Job Board and are never binned automatically again.</span></div>
+    <div class="rowx"><button class="btn">Restore selected</button><span class="by">Restored jobs go back on the Job Board and are never binned automatically again. You can bin any advert yourself from the Job Board or its page.</span></div>
   </form>
   {% else %}<p class="sub">The bin is empty.</p>{% endif %}
   <p class="by">Manage the bin on the machine you scrape from. Publishing sends what's in the bin to the live site.</p>

@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 
-from .. import auth, summary, web
+from .. import auth, streak, summary, web
 
 router = APIRouter()
 
@@ -22,4 +22,4 @@ def home(request: Request, database=Depends(auth.get_db)):
     if person.is_admin:
         return web.redirect("/admin")
     data = summary.user_home(database, person, web.today())
-    return web.page(request, "home.html", person, "home", greeting=greeting(), **data)
+    return web.page(request, "home.html", person, "home", greeting=greeting(), streak=streak.build(database, person, web.today()), **data)

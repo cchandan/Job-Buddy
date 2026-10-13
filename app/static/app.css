@@ -491,3 +491,25 @@ dialog.sheet::backdrop { background: rgba(18, 20, 43, 0.55); }
   .tbtn { width: 72px; height: 72px; border-radius: 50%; padding: 0; justify-content: center; }
   .tbtn--undo { width: 48px; height: 48px; min-height: 0; }
 }
+
+/* Login streak (Home) */
+.streak { display: flex; width: 100%; align-items: center; gap: 14px; min-height: 52px; padding: 7px 20px 7px 7px; border-radius: 999px; background: var(--cobalt); color: #fff; box-shadow: 0 6px 18px rgba(37, 54, 232, 0.28); }
+.streak-ico { width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: var(--lime); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.streak-title { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
+.streak-sep { width: 1px; height: 22px; background: rgba(255, 255, 255, 0.28); flex: none; }
+.streak-days { display: inline-flex; align-items: center; gap: 7px; }
+.sday { width: 34px; height: 34px; border-radius: 50%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.sday--v { background: var(--lime); color: var(--cobalt); }
+.sday--m { background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.4); }
+.sday--f { border: 2px dashed rgba(255, 255, 255, 0.45); }
+.sday--today { box-shadow: 0 0 0 2px var(--cobalt), 0 0 0 4px #fff; }
+.streak-nudge { margin-left: auto; font-size: 14px; color: rgba(255, 255, 255, 0.85); white-space: nowrap; }
+.streak-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--lime); color: var(--ink); font-size: 12px; font-weight: 800; white-space: nowrap; }
+@media (max-width: 780px) {
+  .streak { gap: 10px; min-height: 40px; padding: 6px 8px 6px 14px; }
+  .streak-ico, .streak-sep, .streak-nudge, .streak-badge { display: none; }
+  .streak-title { font-size: 14px; }
+  .streak-days { gap: 4px; margin-left: auto; }
+  .sday { width: 22px; height: 22px; }
+  .sday svg { width: 19px; height: 19px; }
+}

@@ -1,5 +1,6 @@
 """Shared by every route file: templates, page rendering, flash messages, small formatters."""
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,7 +19,8 @@ SPONSOR_LABELS = {"sponsors": "Sponsors visas", "no_sponsorship": "No sponsorshi
 
 
 def today():
-    return date.today()
+    """Today's date in UK time, so a day starts and ends when the family expects."""
+    return datetime.now(ZoneInfo("Europe/London")).date()
 
 
 def money(n):

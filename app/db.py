@@ -259,6 +259,15 @@ class JobDecision(Base):
     created_at = Column(DateTime, default=utcnow)
 
 
+class DailyVisit(Base):
+    """A day a person opened Job Buddy while signed in. One row per person per day, for the login streak."""
+    __tablename__ = "daily_visits"
+    __table_args__ = (UniqueConstraint("person_id", "day", name="uq_visit_person_day"),)
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), nullable=False, index=True)
+    day = Column(Date, nullable=False)
+
+
 class FetchState(Base):
     """When each (source, search) last succeeded, so the next fetch asks only for what is newer."""
     __tablename__ = "fetch_state"

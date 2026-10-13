@@ -36,6 +36,9 @@
   "tick": '<path d="M9 11l3 3 7-7"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/>'
 } %}<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ paths[name]|safe }}</svg>{% endmacro %}
 
+{# The solid flame used by the login streak. #}
+{% macro flame(size=20) %}<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.4 2c.4 2.9-.8 4.5-2.2 6.1C8.9 9.6 7.6 11.1 7.6 13.5c0 1.4.5 2.6 1.4 3.4-.2-1.8.7-2.9 1.7-3.900 1-1 2-2 2.100-3.900 3 1.900 4.700 4.900 4.700 7.800A6.600 6.600 0 0 1 12.200 22C8.400 22 5.700 19.200 5.700 15.600c0-3.200 1.900-5.300 3.600-7.100C10.900 6.800 12.600 5 12.400 2z"/></svg>{% endmacro %}
+
 {% macro csrf_field() %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
 
 {% macro chip(c) %}<span class="chip {{ {'warn': 'chip--warn', 'urgent': 'chip--urgent', 'muted': 'chip--muted', 'none': 'chip--none'}.get(c.tone, '') }}">{{ c.text }}</span>{% endmacro %}

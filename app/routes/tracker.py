@@ -4,7 +4,7 @@ from datetime import date
 from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from .. import auth, cv_pdf, db, summary, tracking, web
+from .. import auth, cv_pdf, db, notify, summary, tracking, web
 
 router = APIRouter()
 TABS = [("", "All"), ("shortlisted", "Shortlisted"), ("applied", "Applied"), ("interviewing", "Interviewing"),
@@ -85,6 +85,7 @@ async def new_submit(request: Request, database=Depends(auth.get_db), person=Dep
     except tracking.TrackerFull:
         web.flash(request, "Your Tracker is full. Remove some old jobs first.", "bad")
         return web.redirect("/tracker")
+    notify.tracker_change(database, person, entry, "added a job to their Tracker")
     web.flash(request, f"Added {db.entry_job(entry).title} to your Tracker.")
     return web.redirect("/tracker")
 
@@ -135,6 +136,7 @@ def set_status(entry_id: int, request: Request, database=Depends(auth.get_db), p
                status: str = Form(""), next: str = Form("/tracker")):
     entry = auth.own_entry(database, person, entry_id)
     if tracking.set_status(database, entry, status, person):
+        notify.tracker_change(database, person, entry, f"moved a job to {web.STATUS_LABELS[status]}")
         web.flash(request, f"Marked as {web.STATUS_LABELS[status]}.")
     return web.redirect(web.safe_next(next, "/tracker"))
 
@@ -190,7 +192,8 @@ def applied(entry_id: int, request: Request, database=Depends(auth.get_db), pers
             answer: str = Form(""), next: str = Form("/tracker")):
     entry = auth.own_entry(database, person, entry_id)
     if answer == "yes":
-        tracking.set_status(database, entry, "applied", person)
+        if tracking.set_status(database, entry, "applied", person):
+            notify.tracker_change(database, person, entry, "moved a job to Applied")
         web.flash(request, "Marked as Applied. Good luck!")
     else:
         entry.apply_clicked_at = None

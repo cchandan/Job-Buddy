@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import auth, db, deadlines, ingest, tracking, web
+from .. import auth, db, deadlines, ingest, notify, tracking, web
 
 router = APIRouter()
 PAGE_SIZE = 60
@@ -117,9 +117,11 @@ def shortlist(job_id: str, request: Request, database=Depends(auth.get_db), pers
         raise HTTPException(status_code=403, detail="Admins assign jobs to a user instead of shortlisting.")
     job = _job(database, job_id)
     try:
-        _, created = tracking.add_from_board(database, person, job, person)
+        entry, created = tracking.add_from_board(database, person, job, person)
     except tracking.TrackerFull:
         web.flash(request, "Your Tracker is full. Remove some old jobs first.", "bad")
         return web.redirect("/tracker")
+    if created:
+        notify.tracker_change(database, person, entry, "added a job to their Tracker")
     web.flash(request, f"Added {job.title} to your Tracker." if created else "That job is already in your Tracker.")
     return web.redirect(web.safe_next(next, "/board"))

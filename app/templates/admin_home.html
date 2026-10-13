@@ -50,7 +50,7 @@
   <section class="card stack" aria-label="{{ u.name }}">
     <div class="rowx" style="gap: 12px">
       <span class="av" style="background: var(--cobalt-tint)">{{ u.initial }}</span>
-      <div class="grow"><div class="t2">{{ u.name }}</div><div class="by">{{ u.username }} · {{ ("last signed in " ~ (u.last_login|when)) if u.last_login else "has not signed in yet" }}</div></div>
+      <div class="grow"><div class="t2">{{ u.name }}</div><div class="by">{{ u.username }} · {{ ("last active " ~ (u.last_login|when)) if u.last_login else "has not signed in yet" }}</div></div>
       <a class="btn btn--primary" href="/admin/users/{{ u.id }}/tracker">Open</a>
     </div>
     <div class="rowx">
@@ -97,7 +97,7 @@
     <h2 class="t2">Admins</h2>
     {% for a in admins %}
     <div class="next-row">
-      <div class="grow"><div class="t3">{{ a.name }}{{ " (you)" if a.id == person.id }}</div><div class="by">{{ a.username }} · {{ ("last signed in " ~ (a.last_login|when)) if a.last_login else "has not signed in yet" }}</div></div>
+      <div class="grow"><div class="t3">{{ a.name }}{{ " (you)" if a.id == person.id }}</div><div class="by">{{ a.username }} · {{ ("last active " ~ (a.last_login|when)) if a.last_login else "has not signed in yet" }}</div></div>
       <form method="post" action="/admin/accounts/{{ a.id }}/password" data-confirm="Make a new password for {{ a.first_name }}? The current one will stop working straight away.">{{ csrf_field() }}<button class="btn">New password</button></form>
     </div>
     {% endfor %}

@@ -14,6 +14,7 @@ from . import db
 
 MAX_FAILURES = 5
 LOCK_MINUTES = 10
+ACTIVE_MINUTES = 15  # how often "last active" is refreshed while someone stays signed in
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no look-alikes (0/o, 1/l/i)
 _N, _R, _P = 2 ** 14, 8, 1
 
@@ -119,6 +120,11 @@ def current_person(request: Request, database=Depends(get_db)):
     if person is None or person.session_version != request.session.get("sv"):
         request.session.pop("pid", None)
         raise NeedLogin()
+    # The cookie keeps people signed in for 30 days, so the sign-in form alone would leave this date stuck.
+    now = db.utcnow()
+    if person.last_login is None or now - person.last_login >= timedelta(minutes=ACTIVE_MINUTES):
+        person.last_login = now
+        database.commit()
     return person
 
 

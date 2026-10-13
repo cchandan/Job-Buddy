@@ -13,6 +13,12 @@ def service_worker():
     return FileResponse(web.HERE / "static" / "sw.js", media_type="text/javascript", headers={"Service-Worker-Allowed": "/"})
 
 
+@router.get("/manifest.webmanifest", include_in_schema=False)
+def web_app_manifest():
+    """Lets an iPhone (or Android) install Job Buddy to the Home Screen as an app. iPhones only allow notifications from there."""
+    return FileResponse(web.HERE / "static" / "manifest.webmanifest", media_type="application/manifest+json")
+
+
 @router.post("/push/subscribe")
 def subscribe(database=Depends(auth.get_db), person=Depends(auth.current_person),
               endpoint: str = Form(""), p256dh: str = Form(""), auth_key: str = Form("", alias="auth")):

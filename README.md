@@ -50,6 +50,9 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 - **Publishing:** set `DATABASE_URL` to the live database, *or* (safer, no database password on your laptop) set `INGEST_URL` and the same `INGEST_TOKEN` here and on Render; then only the jobs the live site lacks are sent.
 - **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
+## The home refresher
+Instead of refreshing jobs by hand from a laptop, an always-on Linux computer at home can do it every morning. A small program (`refresher/`) runs there, scrapes, checks old jobs and publishes, and reports to **Admin > Refresher** on the website: online or offline, progress, last and next refresh, version, the logs, a **Run now** button, and the morning time. Searches and sources are still edited on the website. Add the computer on Admin > Refresher to get a one-time connection code, then follow `refresher/README.md` (written for whoever sets up the computer): download this repo as a ZIP, run `bash refresher/install.sh`, paste the code. It only calls out to the website, so nothing at home is exposed. Admins get a Chrome notification if a refresh fails or the computer goes quiet for a day.
+
 ## Sign-up
 The public page has a **Request an account** form. A request creates nothing: it waits under **Needs you** on Admin home until an admin presses **Approve** (the person then signs in with the username and password they chose; there is no email, so tell them) or **Decline**. Approved accounts are always users, never admins.
 - Until approved, signing in with the right password says "waiting for an admin to approve".

@@ -103,6 +103,7 @@ def check(database, run=None, limit=PER_RUN, pause=(2.0, 5.0), today=None, fetch
         result[verdict] += 1
         if verdict == "closed":
             job.closed_at, job.close_reason = db.utcnow(), reason
+            job.binned_at, job.bin_reason = job.closed_at, ("Expired: " + reason)[:200]  # off the Job Board; Trackers are untouched
         elif verdict == "unknown":
             blocks[host] = blocks.get(host, 0) + 1
             if blocks[host] == BLOCKS_BEFORE_SKIPPING_SITE:

@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta
 
-from . import ai, db, liveness, push, runlog, sources, sponsors, tagging
+from . import ai, db, jobbin, liveness, push, runlog, sources, sponsors, tagging
 from .sources import job_id  # noqa: F401  (also used by tracking.py)
 
 log = logging.getLogger("jobbuddy")
@@ -150,6 +150,7 @@ def _merge(into, raw):
     if raw.get("is_remote") is True or into.get("is_remote") is None:
         into["is_remote"] = raw.get("is_remote", into.get("is_remote"))
     into["matched"] = sorted(set(into.get("matched") or []) | set(raw.get("matched") or []))
+    into["found_by"] = jobbin.merge_found_by(into.get("found_by"), raw.get("found_by"))
     into["content_hash"] = sources.content_hash(into)
     return into
 
@@ -174,7 +175,7 @@ def _upsert(database, raw, tags, now):
     row = db.job_row({**raw, **tags})
     job = database.get(db.Job, raw["id"])
     if job is None:
-        database.add(db.Job(**row, first_seen=now, last_seen=now))
+        database.add(db.Job(**row, first_seen=now, last_seen=now, found_by=raw.get("found_by"), **_bin_fields(raw)))
         return "new"
     row = _keep_deadline(job, row)
     row["sources"] = sorted(set(job.sources or []) | set(row["sources"]))
@@ -184,8 +185,23 @@ def _upsert(database, raw, tags, now):
     for field, value in row.items():
         if field != "id":
             setattr(job, field, value)
+    if "found_by" in raw:
+        job.found_by = jobbin.merge_found_by(job.found_by, raw["found_by"])
+    if "binned_at" in raw:  # the laptop is telling the live site what is in the bin
+        for field, value in _bin_fields(raw).items():
+            setattr(job, field, value)
+    else:  # found again by a search: it is open, and it matters, so it comes out of the bin
+        job.binned_at, job.bin_reason = None, ""
     job.last_seen, job.closed_at, job.close_reason = now, None, ""  # found again: it is open
     return "updated"
+
+
+def _bin_fields(raw):
+    """binned_at / bin_reason from a job dict: only present when the laptop publishes to the live site."""
+    if "binned_at" not in raw:
+        return {}
+    at = raw.get("binned_at")
+    return {"binned_at": datetime.fromisoformat(at) if isinstance(at, str) and at else None, "bin_reason": str(raw.get("bin_reason") or "")[:200]}
 
 
 def _backfill_keys(database):
@@ -273,6 +289,7 @@ def _fetch_all(run, picked, plan, avoid, per_search, state, on_batch):
                 raw["matched"] = [pid for pid in people if not _avoids(raw["title"], avoid.get(pid, []))]
                 if not raw["matched"]:
                     continue  # every person this search was for rules it out by title
+                raw["found_by"] = {str(pid): [term] for pid in raw["matched"]}  # which search found it, so removed searches can be told apart later
                 ckey = raw["canonical_key"]
                 batch[ckey] = _merge(batch[ckey], raw) if ckey in batch else _first(raw)
             try:
@@ -363,6 +380,14 @@ def refresh(person_id=None, state=STATE, check_pages=True, stages=None):
         log.exception("refresh crashed")
         run.event("plan", f"The refresh stopped unexpectedly ({type(e).__name__}). Jobs found before that are saved; press Refresh to carry on.",
                   level="error")
+    if ("scrape" in stages or "liveness" in stages) and not cannot and not crashed:
+        try:
+            with db.SessionLocal() as s:
+                binned = jobbin.sweep_expired(s)
+            if binned:
+                run.event("bin", f"{binned} expired job{'' if binned == 1 else 's'} moved to the bin (hidden from the Job Board, nothing deleted).")
+        except Exception as e:
+            run.event("bin", f"Could not tidy expired jobs into the bin ({type(e).__name__}); they are still marked expired.", level="warn")
     pushed = None
     if "publish" in stages and not cannot and push.configured():
         state["phase"] = "Publishing"
@@ -445,12 +470,17 @@ def _save(run, raws, backends, state, totals):
     with db.SessionLocal() as s:
         for r in seen:  # a job one person has may now match another
             job = s.get(db.Job, r["id"])
-            if job is not None and set(r.get("matched") or []) - set(job.matched or []):
+            if job is None:
+                continue
+            if set(r.get("matched") or []) - set(job.matched or []):
                 job.matched = sorted(set(job.matched or []) | set(r["matched"]))
+            merged = jobbin.merge_found_by(job.found_by, r.get("found_by"))
+            if merged != job.found_by:
+                job.found_by = merged
         ids = [r["id"] for r in seen]
         for i in range(0, len(ids), 500):
             s.query(db.Job).filter(db.Job.id.in_(ids[i:i + 500])).update(
-                {"last_seen": now, "closed_at": None, "close_reason": ""}, synchronize_session=False)
+                {"last_seen": now, "closed_at": None, "close_reason": "", "binned_at": None, "bin_reason": ""}, synchronize_session=False)
         s.commit()
     totals["new"] += new
     totals["updated"] += updated

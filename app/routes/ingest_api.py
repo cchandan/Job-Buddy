@@ -28,8 +28,8 @@ async def manifest(request: Request, database=Depends(auth.get_db)):
     """Which of the laptop's jobs does the site lack, or hold in a different version?"""
     hashes = (await request.json()).get("hashes") or {}
     names = {p.id: p.username for p in database.query(db.Person)}
-    have = {j.id: push.signature(j.content_hash, [names[i] for i in (j.matched or []) if i in names])
-            for j in database.query(db.Job.id, db.Job.content_hash, db.Job.matched)}
+    have = {j.id: push.signature(j.content_hash, [names[i] for i in (j.matched or []) if i in names], bool(j.binned_at))
+            for j in database.query(db.Job.id, db.Job.content_hash, db.Job.matched, db.Job.binned_at)}
     return {"need": [i for i, h in hashes.items() if i not in have or have[i] != h]}
 
 

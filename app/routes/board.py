@@ -30,7 +30,7 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     # The database narrows the list and the heavy advert text is never read: a list page does not show it. What is left
     # (closing status, "for you" matches, ranking) is cheap Python over a small, light set.
     # ponytail: ceiling is a few tens of thousands of jobs; past that, move status and matches into SQL too.
-    query = database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls))
+    query = database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls)).filter(db.Job.binned_at.is_(None))
     if needle:
         query = query.filter(or_(func.lower(db.Job.title).contains(needle, autoescape=True),
                                  func.lower(db.Job.company).contains(needle, autoescape=True)))

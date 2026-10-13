@@ -3,6 +3,7 @@
 {% block title %}{{ job.title }}{% endblock %}
 {% block content %}
 <a class="lnk" href="/board">Back to the Job Board</a>
+{% if job.binned_at %}<div class="notice" style="display: block"><strong>This job is in the bin, so it isn't on the Job Board any more.</strong> {{ job.bin_reason }}{% if person.is_admin %} <a class="lnk" href="/admin/bin">Open the Bin</a>{% endif %}</div>{% endif %}
 <div class="head">
   <div class="tight">
     <h1 class="t">{{ job.title }}</h1>

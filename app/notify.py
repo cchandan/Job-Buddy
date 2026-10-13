@@ -128,6 +128,13 @@ def admins(database, actor, title, body="", url="/admin", tag=""):
 
 
 @_never_raises
+def new_signup(database, name):
+    """Someone asked for an account on the public page: tell every admin."""
+    for admin in database.query(db.Person).filter(db.Person.role == "admin"):
+        notify(admin.id, "New sign-up request", f"{name} would like an account.", "/admin", tag="signup")
+
+
+@_never_raises
 def visit(database, person, what):
     """Someone is on the site: signed in with their password, or came back with their cookie after a break."""
     url = "/admin" if person.is_admin else f"/admin/users/{person.id}/tracker"

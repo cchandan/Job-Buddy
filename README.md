@@ -47,6 +47,13 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 - **Publishing:** set `DATABASE_URL` to the live database, *or* (safer, no database password on your laptop) set `INGEST_URL` and the same `INGEST_TOKEN` here and on Render; then only the jobs the live site lacks are sent.
 - **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
+## Sign-up
+The public page has a **Request an account** form. A request creates nothing: it waits under **Needs you** on Admin home until an admin presses **Approve** (the person then signs in with the username and password they chose; there is no email, so tell them) or **Decline**. Approved accounts are always users, never admins.
+- Until approved, signing in with the right password says "waiting for an admin to approve".
+- Admin home has a **Close sign-up** switch. Requests already waiting stay there.
+- Limits: 5 attempts per hour per address, 25 requests waiting at once, and a hidden trap field for bots. Admins also get a notification when a request arrives (if browser notifications are on).
+- Usernames already in use are refused, which tells a visitor that name exists. Choose non-guessable admin usernames if that matters.
+
 ## Browser notifications
 Chrome pop-ups, with nothing to install. Free: the browser's own push service does the delivery.
 - **Admins** are told when someone signs in or comes back to the site, when a job is added or shortlisted in a Tracker (or assigned by another admin), and when its status changes (Applied, Interviewing, Rejected and so on). Nothing else is reported, and you are never told about your own actions.

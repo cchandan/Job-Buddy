@@ -25,6 +25,7 @@ def login(request: Request, database=Depends(auth.get_db), username: str = Form(
     person, problem = auth.sign_in(database, username[:60], password[:200])
     if person is None:
         error = ("Too many attempts. Try again in a few minutes." if problem == "locked"
+                 else "Your sign-up is waiting for an admin to approve it. Please try again later." if problem == "pending"
                  else "That username or password isn't right.")
         return web.page(request, "login.html", None, status_code=401, next=web.safe_next(next, ""), error=error,
                         username=username[:60])

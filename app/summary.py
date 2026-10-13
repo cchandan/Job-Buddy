@@ -3,7 +3,7 @@ their own, so they can never disagree with the other pages.
 """
 from datetime import datetime, timedelta
 
-from . import db, deadlines, ingest, runlog
+from . import auth, db, deadlines, ingest, runlog
 
 SOON_DAYS = 7
 ADMIN_URGENT_DAYS = 3
@@ -103,7 +103,8 @@ def admin_home(database, today):
         parts.append("the Job Board was updated today" if age == 0 else f"the Job Board is {_plural(age, 'day')} old")
     line = " and ".join(parts)
     return {
-        "cards": cards, "admins": admins, "urgent": urgent, "board_age": age, "last_sync": ingest.last_sync(database),
+        "cards": cards, "admins": admins, "urgent": urgent, "signups": database.query(db.SignupRequest).order_by(db.SignupRequest.created_at).all(),
+        "signups_open": auth.signups_open(database), "board_age": age, "last_sync": ingest.last_sync(database),
         "stale": age is None or age > 3, "notes": runlog.attention(database, today), "job_count": database.query(db.Job).count(),
         "line": line[:1].upper() + line[1:] + ".", "activity": activity(database),
     }

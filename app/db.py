@@ -189,6 +189,16 @@ class AppSetting(Base):
     value = Column(Text, default="")
 
 
+class SignupRequest(Base):
+    """Someone asking for an account from the public page. Becomes a Person only when an admin approves it."""
+    __tablename__ = "signup_requests"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(80), nullable=False)
+    username = Column(String(40), nullable=False, unique=True)
+    password_hash = Column(String(200), nullable=False)  # the password they chose, hashed like any other
+    created_at = Column(DateTime, default=utcnow)
+
+
 class PushSubscription(Base):
     """One browser a person has turned notifications on in. Dropped when the push service says it is gone."""
     __tablename__ = "push_subscriptions"

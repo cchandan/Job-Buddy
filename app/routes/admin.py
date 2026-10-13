@@ -39,6 +39,48 @@ def create_account(request: Request, database=Depends(auth.get_db), person=Depen
     return web.redirect("/admin")
 
 
+@router.post("/signups/toggle")
+def signups_toggle(request: Request, database=Depends(auth.get_db)):
+    turning_off = auth.signups_open(database)
+    database.merge(db.AppSetting(key="signups", value="off" if turning_off else "on"))
+    database.commit()
+    web.flash(request, "Public sign-up is closed. Nobody new can ask for an account." if turning_off else "Public sign-up is open.")
+    return web.redirect("/admin")
+
+
+def _signup(database, request_id):
+    req = database.get(db.SignupRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail="That sign-up request has already been dealt with.")
+    return req
+
+
+@router.post("/signups/{request_id}/approve")
+def signup_approve(request_id: int, request: Request, database=Depends(auth.get_db)):
+    req = _signup(database, request_id)
+    if database.query(db.Person).filter(db.Person.username == req.username).first() is not None:
+        database.delete(req)  # an admin made an account with that username in the meantime
+        database.commit()
+        web.flash(request, f"The username “{req.username}” was taken in the meantime, so that request was dropped.", "bad")
+        return web.redirect("/admin")
+    database.add(db.Person(name=req.name, username=req.username, role="user", password_hash=req.password_hash))
+    name, username = req.name, req.username
+    database.delete(req)
+    database.commit()
+    web.flash(request, f"Approved {name}. They can sign in now as “{username}” with the password they chose. Let them know.")
+    return web.redirect("/admin")
+
+
+@router.post("/signups/{request_id}/reject")
+def signup_reject(request_id: int, request: Request, database=Depends(auth.get_db)):
+    req = _signup(database, request_id)
+    name = req.name
+    database.delete(req)
+    database.commit()
+    web.flash(request, f"Declined {name}'s request.")
+    return web.redirect("/admin")
+
+
 def _account(database, account_id):
     account = database.get(db.Person, account_id)
     if account is None:

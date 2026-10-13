@@ -1,7 +1,8 @@
 """Passwords, sign-in, lockout, the session, and the three guards every route uses.
 
-Accounts are created only by an admin. The app generates each password, shows it once, and stores only a
-salted scrypt hash. Passwords are never logged.
+Accounts are created by an admin (the app generates the password and shows it once) or requested on the public
+page and approved by an admin (the person chooses their own). Only a salted scrypt hash is stored. Passwords are
+never logged.
 """
 import hashlib
 import hmac
@@ -49,6 +50,12 @@ def check_password(password, stored):
 _DUMMY_HASH = hash_password(secrets.token_hex(8))  # so a missing username takes as long as a real one
 
 
+def signups_open(database):
+    """Whether the public page accepts new sign-up requests (an admin can close it)."""
+    row = database.get(db.AppSetting, "signups")
+    return not (row is not None and row.value == "off")
+
+
 def valid_username(username):
     return 3 <= len(username) <= 40 and all(c.isalnum() or c in "._-" for c in username)
 
@@ -60,7 +67,11 @@ def sign_in(database, username, password):
     person = database.query(db.Person).filter(db.Person.username == username.strip().lower()).first()
     now = db.utcnow()
     if person is None:
-        check_password(password, _DUMMY_HASH)
+        pending = database.query(db.SignupRequest).filter(db.SignupRequest.username == username.strip().lower()).first()
+        if pending is None:
+            check_password(password, _DUMMY_HASH)
+        elif check_password(password, pending.password_hash):
+            return None, "pending"  # right password, but an admin hasn't approved the sign-up yet
         return None, "wrong"
     if person.locked_until and person.locked_until > now:
         return None, "locked"

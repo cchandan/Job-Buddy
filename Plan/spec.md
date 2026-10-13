@@ -85,7 +85,7 @@ Review is optional: a user can apply with a Draft.
 
 ### Sign-in and roles
 - FR1: Sign-in is by username and password. There is no anonymous use and no sign-up; every page except the sign-in page and the health check needs a signed-in person.
-- FR2: Accounts are created by an admin, who enters the person's name, a username and a role. The app generates a strong password and shows it to the admin once, to pass on. Passwords are stored only as a salted hash and are never shown again, logged or emailed.
+- FR2: Anyone can request an account on the public page (name, username, a password of their choice); it is created only when an admin approves it, and always as a user. Otherwise accounts are created by an admin, who enters the person's name, a username and a role. The app generates a strong password and shows it to the admin once, to pass on. Passwords are stored only as a salted hash and are never shown again, logged or emailed.
 - FR3: An admin can generate a new password for any account (the old one stops working at once, and that person is signed out) and can remove an account. A person can change their own password on Profile. The first admin account is created by a one-off setup command.
 - FR3a: A wrong username or password gives one plain message that does not say which was wrong. After 5 wrong attempts in a row the account is locked for 10 minutes.
 - FR4: Sign-out is available on every page.

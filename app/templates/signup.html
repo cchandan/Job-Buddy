@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#2536e8">
+  <title>Request an account · Job Buddy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css?v=4">
+</head>
+<body class="app login">
+<main class="card">
+  <div>
+    <h1 class="t" style="font-size: 34px">Job Buddy</h1>
+    <p class="sub" style="font-size: 16px; margin-top: 8px">Request an account. An admin will look at it and approve it.</p>
+  </div>
+  {% if sent %}
+  <div class="flash" role="status">Thanks. Your request has been sent. You can sign in once an admin approves it, using the username and password you just chose.</div>
+  <a class="btn btn--primary" href="/login" style="min-height: 52px; font-size: 16px">Go to sign in</a>
+  {% elif closed %}
+  <div class="flash flash--bad" role="status">Sign-up is closed at the moment. Please ask an admin directly.</div>
+  <a class="btn" href="/login">Back to sign in</a>
+  {% else %}
+  {% if error %}<div class="flash flash--bad" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/signup" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="lab" for="name">Your name</label>
+      <input id="name" name="name" class="input" maxlength="80" autocomplete="name" required autofocus value="{{ values.get('name', '') }}"></div>
+    <div class="field"><label class="lab" for="username">Choose a username (letters, numbers, dots or dashes)</label>
+      <input id="username" name="username" class="input" minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" required value="{{ values.get('username', '') }}"></div>
+    <div class="field"><label class="lab" for="password">Choose a password (at least 10 characters)</label>
+      <input id="password" name="password" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required></div>
+    <div class="field"><label class="lab" for="again">Password again</label>
+      <input id="again" name="again" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required></div>
+    <div aria-hidden="true" style="position: absolute; left: -9999px"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn--primary" style="min-height: 52px; font-size: 16px">Send my request</button>
+  </form>
+  <p class="by">Already approved? <a href="/login">Sign in</a>. Job Buddy is private: nothing is visible until an admin says yes.</p>
+  {% endif %}
+</main>
+</body>
+</html>

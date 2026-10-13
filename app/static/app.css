@@ -447,3 +447,47 @@ details.more[open] > summary.foldhead { margin-bottom: 4px; }
 .split--cal > :last-child { flex: 1 1 560px; }
 .split--cal .cal { min-width: 560px; }
 .filterpop-panel { top: calc(100% + 8px); }
+
+/* Triage */
+.split--triage > :first-child { flex: 1 1 480px; max-width: 640px; }
+.split--triage > :last-child { flex: 1 1 280px; }
+.triage-main { position: relative; }
+.tcard { position: relative; background: var(--stock); border: 1px solid var(--line); border-radius: 22px; padding: 26px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 10px 30px rgba(18, 20, 43, 0.08); touch-action: pan-y; user-select: none; transition: transform .2s ease, border-color .15s; }
+.tcard.dragging { transition: none; cursor: grabbing; }
+.tcard.going-skip { border-color: var(--coral-ink); }
+.tcard.going-yes { border-color: var(--cobalt); }
+.logo { width: 52px; height: 52px; border-radius: 12px; background: var(--cobalt-tint); color: var(--cobalt-deep); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; flex: none; }
+.ttitle { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
+.whybox { background: #f7f8ff; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.whylab { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cobalt-deep); }
+.tstamp { position: absolute; top: 22px; border: 3px solid; border-radius: 10px; padding: 2px 12px; font-size: 24px; font-weight: 800; letter-spacing: 0.06em; background: rgba(255, 255, 255, 0.92); opacity: 0; transition: opacity .1s; pointer-events: none; }
+.tstamp--skip { right: 22px; color: var(--coral-ink); transform: rotate(12deg); }
+.tstamp--yes { left: 22px; color: var(--cobalt); transform: rotate(-12deg); }
+.tcard.going-skip .tstamp--skip, .tcard.going-yes .tstamp--yes { opacity: 1; }
+.tbar { display: flex; gap: 14px; justify-content: center; align-items: center; }
+.tbtn { min-height: 56px; padding: 0 26px; border-radius: 16px; border: 2px solid; background: var(--stock); font: inherit; font-weight: 700; font-size: 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.tbtn--skip { border-color: var(--coral-ink); color: var(--coral-ink); }
+.tbtn--yes { border-color: var(--cobalt); background: var(--cobalt); color: #fff; }
+.tbtn--undo { min-height: 56px; padding: 0 18px; border-color: var(--line-strong); font-weight: 600; font-size: 15px; }
+.tbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.tkeys { text-align: center; margin: 0; }
+.mini { flex: 1; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.panel--tint { background: #f7f8ff; }
+.toast { position: sticky; bottom: 16px; background: var(--ink); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.toast button { min-height: 40px; padding: 0 10px; border: 0; background: transparent; color: var(--lime); font: inherit; font-weight: 700; cursor: pointer; }
+.pill { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--stock); font: inherit; font-weight: 600; cursor: pointer; }
+.pill:hover { border-color: var(--cobalt); background: var(--cobalt-tint); }
+dialog.sheet { border: 0; padding: 20px 22px 24px; border-radius: 22px; width: min(440px, calc(100vw - 24px)); box-shadow: 0 20px 60px rgba(18, 20, 43, 0.3); }
+dialog.sheet::backdrop { background: rgba(18, 20, 43, 0.55); }
+.fchip form.inline { display: inline-flex; }
+.fchip button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--cobalt-deep); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.fchip button:hover { background: rgba(37, 54, 232, 0.12); }
+@media (max-width: 780px) {
+  .tkeys .kb { display: none; }
+  .tcard { padding: 20px; }
+  .ttitle { font-size: 24px; }
+  dialog.sheet { margin: auto auto 0; width: 100%; max-width: none; border-radius: 22px 22px 0 0; }
+  .tbtn span { display: none; }
+  .tbtn { width: 72px; height: 72px; border-radius: 50%; padding: 0; justify-content: center; }
+  .tbtn--undo { width: 48px; height: 48px; min-height: 0; }
+}

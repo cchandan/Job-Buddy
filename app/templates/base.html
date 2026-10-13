@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/app.css?v=5">
+  <link rel="stylesheet" href="/static/app.css?v=6">
 </head>
 <body class="app">
 {% if viewing %}
@@ -77,6 +77,7 @@
     </div>
     <div class="nav">
       <span class="nav-label">Jobs</span>
+      <a href="/triage" {% if active == "triage" %}class="on" aria-current="page"{% endif %}>{{ icon("triage") }}<span class="grow">Triage</span>{% if nav and nav.triage %}<span class="count" aria-label="{{ nav.triage }} job{{ '' if nav.triage == 1 else 's' }} to look at">{{ nav.triage }}</span>{% endif %}</a>
       <a href="/board" {% if active == "board" %}class="on" aria-current="page"{% endif %}>{{ icon("board") }}<span class="grow">Job Board</span>{% if nav and nav.new_jobs %}<span class="count count--quiet" aria-label="{{ nav.new_jobs }} new since you last looked">{{ nav.new_jobs }} new</span>{% endif %}</a>
     </div>
     <div class="nav">

@@ -8,8 +8,6 @@
 
 {% macro listing_badge(listing) %}<span class="badge {{ {'open': 'b-open', 'closing_soon': 'b-closing', 'closed': 'b-closed', 'possibly_closed': 'b-closed'}[listing] }}">{{ LISTING_LABELS[listing] }}</span>{% endmacro %}
 
-{% macro cv_badge(cv) %}{% if cv %}<span class="badge {{ {'draft': 'b-draft', 'in_review': 'b-review', 'approved': 'b-ok', 'changes_requested': 'b-changes'}[cv.status] }}">CV: {{ CV_LABELS[cv.status] }}</span>{% else %}<span class="badge b-none">No CV yet</span>{% endif %}{% endmacro %}
-
 {% macro meta(job, mode=True) %}{{ job.company or "Company not given" }}{% if job.location %} · {{ job.location }}{% endif %} · {{ salary(job) or "Salary not stated" }}{% if mode and job.work_mode in MODE_LABELS %} · {{ MODE_LABELS[job.work_mode] }}{% endif %}{% endmacro %}
 
 {% macro tags(job) %}
@@ -33,7 +31,6 @@
         {{ chip(v.chip) }}
         {% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}
         {% if readonly %}{{ status_badge(e.status) }}{% endif %}
-        {{ cv_badge(v.cv) }}
         {% if e.source == "assigned" and e.seen_at is none and not readonly %}<span class="badge b-new">New</span>{% endif %}
       </div>
       <div class="by">{{ added_by(e, viewer) }} · {{ e.created_at|dmy }}{% if e.notes %} · Notes: {{ e.notes|truncate(90) }}{% endif %}</div>
@@ -47,7 +44,6 @@
         <noscript><button class="btn">Save status</button></noscript>
       </form>
       <div class="rowx">
-        <a class="btn" href="/tracker/{{ e.id }}/cv">{{ "Open tailored CV" if v.cv else "Create tailored CV" }}</a>
         {% if job.url %}
         <form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>
           {{ csrf_field() }}<button class="btn {{ 'btn--primary' if e.status == 'shortlisted' and not v.passed }}">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button>
@@ -57,7 +53,6 @@
       </div>
       {% else %}
       <div class="rowx" style="justify-content: flex-end">
-        {% if v.cv %}<a class="btn" href="/admin/review/{{ e.id }}">View CV</a>{% endif %}
         {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
         <a class="btn" href="{{ href }}">Details</a>
       </div>
@@ -95,6 +90,6 @@
   <div class="field"><label class="lab" for="f-sponsor">Visa sponsorship</label>
     <select id="f-sponsor" name="sponsorship" class="input">{% for value, label in (("unclear", "Not sure"), ("sponsors", "Sponsors visas"), ("no_sponsorship", "No sponsorship")) %}<option value="{{ value }}" {{ 'selected' if d.get('sponsorship') == value }}>{{ label }}</option>{% endfor %}</select></div>
 </div>
-<div class="field"><label class="lab" for="f-desc">Job description (needed to create a tailored CV)</label><textarea id="f-desc" name="description" class="input" style="min-height: 180px" maxlength="20000">{{ d.get('description', '') }}</textarea></div>
+<div class="field"><label class="lab" for="f-desc">Job description</label><textarea id="f-desc" name="description" class="input" style="min-height: 180px" maxlength="20000">{{ d.get('description', '') }}</textarea></div>
 <div class="field"><label class="lab" for="f-notes">Notes</label><textarea id="f-notes" name="notes" class="input" maxlength="4000">{{ notes }}</textarea></div>
 {% endmacro %}

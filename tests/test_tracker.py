@@ -10,7 +10,7 @@ def entries(person_id=None):
         q = s.query(db.TrackerEntry)
         rows = (q.filter(db.TrackerEntry.person_id == person_id) if person_id else q).all()
         for row in rows:
-            row.job, row.tailored  # load before the session closes
+            row.job  # load before the session closes
         return rows
 
 
@@ -98,44 +98,6 @@ def test_home_matches_the_tracker(people):
     later = [e for e in entries() if e.job_id == "j1"][0]
     wife.post(f"/tracker/{later.id}/status", {"status": "applied"})
     assert "Nothing urgent today" in wife.get("/").text
-
-
-def test_tailored_cv_and_review(people, monkeypatch):
-    make_job("j1", title="CV job")
-    wife = signed_in("wife")
-    wife.post("/board/j1/shortlist")
-    entry_id = entries()[0].id
-    assert "Upload your CV first" in wife.get(f"/tracker/{entry_id}/cv").text  # blocked with a reason
-    wife.post("/profile/cv", {"cv_text": "Jane Example. Software tester at Acme 2022 to 2025. Skills: Python, SQL. " * 3})
-    assert "Uploaded" in wife.get("/profile").text
-    assert "Tailoring isn't available right now" in wife.get(f"/tracker/{entry_id}/cv").text  # no AI key in tests
-
-    monkeypatch.setattr(ai, "available", lambda: True)
-    monkeypatch.setattr(ai, "_call_model", lambda prompt: "JANE EXAMPLE\n\nEXPERIENCE\n- Software tester at Acme 2022 to 2025\n\nSKILLS\n- Python, SQL")
-    assert wife.post(f"/tracker/{entry_id}/cv/create").status_code == 303
-    page = wife.get(f"/tracker/{entry_id}/cv").text
-    assert "JANE EXAMPLE" in page and "CV: Draft" in page
-    wife.post(f"/tracker/{entry_id}/cv/save", {"text": "JANE EXAMPLE\n\nEXPERIENCE\n- Software tester at Acme 2022 to 2025, edited\n\nSKILLS\n- Python", "then": "send"})
-    assert entries()[0].tailored.status == "in_review"
-
-    dad = signed_in("dad")
-    assert "CV job" in dad.get("/admin/review").text and "1 CV to review" in dad.get("/admin").text
-    dad.post(f"/admin/review/{entry_id}", {"decision": "changes", "comment": ""})
-    assert entries()[0].tailored.status == "in_review"  # a comment is needed to ask for changes
-    dad.post(f"/admin/review/{entry_id}", {"decision": "changes", "comment": "Shorten the summary"})
-    assert entries()[0].tailored.status == "changes_requested"
-    assert "Dad asked for changes to your CV" in wife.get("/").text
-    assert "Shorten the summary" in wife.get(f"/tracker/{entry_id}/cv").text
-    assert "asked for changes to your CV" not in wife.get("/").text  # seen now
-
-    wife.post(f"/tracker/{entry_id}/cv/save", {"text": "JANE EXAMPLE\n\nEXPERIENCE\n- Software tester at Acme 2022 to 2025\n\nSKILLS\n- Python, SQL, short", "then": "send"})
-    dad.post(f"/admin/review/{entry_id}", {"decision": "approve"})
-    assert entries()[0].tailored.status == "approved"
-    wife.post(f"/tracker/{entry_id}/cv/save", {"text": "JANE EXAMPLE\n\nEXPERIENCE\n- Software tester at Acme 2022 to 2025\n\nSKILLS\n- Python, SQL, changed again"})
-    assert entries()[0].tailored.status == "draft"      # editing after approval needs review again
-    assert wife.get(f"/tracker/{entry_id}/cv/print").status_code == 200
-    assert wife.get("/profile/cv/download").status_code == 200
-    assert dad.get(f"/admin/users/{people['wife']}/profile").status_code == 200
 
 
 def test_board_filters_and_hides_closed(people):

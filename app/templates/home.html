@@ -11,9 +11,9 @@
 <section class="card" aria-label="Getting started">
   <h2 class="t2" style="margin-bottom: 8px">Getting started</h2>
   <ol class="steps">
-    <li><span class="tick {{ 'done' if has_cv }}">{{ "✓" if has_cv else "1" }}</span><span class="grow"><strong>Upload your CV</strong><br><span class="meta">It becomes the base for a CV tailored to each job.</span></span><a class="btn btn--primary" href="/profile">Go to Profile</a></li>
+    <li><span class="tick {{ 'done' if has_cv }}">{{ "✓" if has_cv else "1" }}</span><span class="grow"><strong>Upload your CV</strong><br><span class="meta">Keep it here so it is ready whenever you apply.</span></span><a class="btn btn--primary" href="/profile">Go to Profile</a></li>
     <li><span class="tick">2</span><span class="grow"><strong>Browse the Job Board</strong><br><span class="meta">{{ new_jobs }} jobs are waiting, each with its deadline.</span></span><a class="btn" href="/board">Open the Job Board</a></li>
-    <li><span class="tick">3</span><span class="grow"><strong>Shortlist your first job</strong><br><span class="meta">It moves to your Tracker, where you can tailor your CV and apply.</span></span><a class="btn" href="/tracker">See your Tracker</a></li>
+    <li><span class="tick">3</span><span class="grow"><strong>Shortlist your first job</strong><br><span class="meta">It moves to your Tracker, where you can track it and apply.</span></span><a class="btn" href="/tracker">See your Tracker</a></li>
   </ol>
 </section>
 {% else %}
@@ -30,8 +30,7 @@
     </div>
     <div class="rowx">
       {{ chip(v.chip) }}
-      {% if item.kind == "review" %}<a class="btn btn--primary" href="/tracker/{{ v.entry.id }}/cv">Open CV</a>
-      {% elif item.kind == "applied" %}
+      {% if item.kind == "applied" %}
       <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
       <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="/"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
       {% elif item.kind == "deadline" and v.job.url %}

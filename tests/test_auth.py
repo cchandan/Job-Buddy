@@ -6,7 +6,7 @@ from conftest import Browser, make_person, signed_in
 
 
 def test_every_page_needs_sign_in(browser):
-    for url in ("/board", "/tracker", "/calendar", "/profile", "/admin", "/admin/review", "/admin/sync"):
+    for url in ("/board", "/tracker", "/calendar", "/profile", "/admin", "/admin/sync"):
         r = browser.get(url)
         assert r.status_code == 303 and r.headers["location"].startswith("/login"), url
     assert browser.get("/health").status_code == 200

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip, status_badge, cv_badge, meta, tags, csrf_field, status_options with context %}
+{% from "_macros.html" import chip, status_badge, meta, tags, csrf_field, status_options with context %}
 {% set e = v.entry %}{% set job = v.job %}
 {% block title %}{{ job.title }}{% endblock %}
 {% block content %}
@@ -9,15 +9,13 @@
   <div class="tight">
     <h1 class="t">{{ job.title }}</h1>
     <p class="sub">{{ meta(job) }}</p>
-    <div class="rowx">{{ chip(v.chip) }}{% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}{{ status_badge(e.status) }}{{ cv_badge(v.cv) }}{{ tags(job) }}</div>
+    <div class="rowx">{{ chip(v.chip) }}{% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}{{ status_badge(e.status) }}{{ tags(job) }}</div>
     <div class="by">{{ added_by(e, person) }} · {{ e.created_at|dmy(True) }}</div>
   </div>
   <div class="rowx">
     {% if not readonly %}
-      <a class="btn" href="/tracker/{{ e.id }}/cv">{{ "Open tailored CV" if v.cv else "Create tailored CV" }}</a>
       {% if job.url %}<form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>{{ csrf_field() }}<button class="btn btn--primary">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button></form>{% endif %}
     {% else %}
-      {% if v.cv %}<a class="btn" href="/admin/review/{{ e.id }}">View CV</a>{% endif %}
       {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
     {% endif %}
   </div>
@@ -83,11 +81,11 @@
     {% if not readonly and not e.job_id %}<a class="btn" href="/tracker/{{ e.id }}/edit">Edit job details</a>{% endif %}</div>
   {% if job.sponsorship_quote %}<div><span class="lab">Visa sponsorship</span>{{ SPONSOR_LABELS[job.sponsorship] }} <span class="quote">“{{ job.sponsorship_quote }}”</span></div>{% endif %}
   {% if job.description %}<div class="pre">{{ job.description }}</div>
-  {% else %}<p class="sub">No description yet. {{ "Add one to be able to create a tailored CV." if not readonly }}</p>{% endif %}
+  {% else %}<p class="sub">No description yet.</p>{% endif %}
 </section>
 
 {% if not readonly %}
-<form method="post" action="/tracker/{{ e.id }}/remove" data-confirm="Remove this job from your Tracker? Its tailored CV and notes will be deleted too.">
+<form method="post" action="/tracker/{{ e.id }}/remove" data-confirm="Remove this job from your Tracker? Its notes will be deleted too.">
   {{ csrf_field() }}<button class="btn btn--danger">Remove from Tracker</button>
 </form>
 {% endif %}

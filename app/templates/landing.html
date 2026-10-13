@@ -26,7 +26,7 @@
     <div class="hero-grid wrap">
       <div class="hero-copy">
         <h1 id="hero-title">Big next step.<br>Better <br><em>together.</em></h1>
-        <p>Your next chapter deserves a little backup. Find the jobs, shape your CV and keep moving forward—with your people by your side.</p>
+        <p>Your next chapter deserves a little backup. Find the jobs, keep track of every deadline and keep moving forward—with your people by your side.</p>
         <a class="action action-lime" href="/login">Sign in to your workspace {{ arrow() }}</a>
         <span class="invitation">Your own space. A shared helping hand.</span>
       </div>
@@ -36,7 +36,6 @@
           <div class="workspace-top"><span class="mini-brand">Job Buddy<span>.</span></span><span class="avatar" aria-label="Example user Alex">A</span></div>
           <div class="preview-tabs" role="tablist" aria-label="Explore the workspace" hidden>
             <button id="tab-tracker" type="button" role="tab" aria-controls="panel-tracker" aria-selected="true">Tracker</button>
-            <button id="tab-cv" type="button" role="tab" aria-controls="panel-cv" aria-selected="false" tabindex="-1">Tailored CV</button>
             <button id="tab-calendar" type="button" role="tab" aria-controls="panel-calendar" aria-selected="false" tabindex="-1">Calendar</button>
           </div>
           <div id="panel-tracker" class="preview-panel" role="tabpanel" aria-labelledby="tab-tracker" tabindex="0">
@@ -44,12 +43,7 @@
             <div class="job-row"><span class="company-icon company-blue">N</span><div><h3>Graduate Developer</h3><p>North Studio · London</p></div><span class="status shortlisted">Shortlisted</span></div>
             <div class="job-row"><span class="company-icon company-green">F</span><div><h3>Junior Product Designer</h3><p>Forma · Manchester</p></div><span class="status applied">Applied</span></div>
             <div class="job-row"><span class="company-icon company-pink">O</span><div><h3>Data Analyst</h3><p>Orbit · Remote</p></div><span class="status interviewing">Interviewing</span></div>
-            <div class="next-action"><span class="check-circle">{{ check() }}</span><div><strong>You’ve got a second pair of eyes.</strong><p>Your tailored CV is ready to review.</p></div></div>
-          </div>
-          <div id="panel-cv" class="preview-panel" role="tabpanel" aria-labelledby="tab-cv" tabindex="0" hidden>
-            <div class="preview-heading"><div><p>One opportunity. Your experience.</p><h2>A CV that makes<br>the connection.</h2></div></div>
-            <div class="cv-paper"><div class="cv-title"><strong>Alex Morgan</strong><span>Graduate Developer</span></div><h3>Profile</h3><p>Computer science graduate who enjoys turning complex problems into simple, useful software.</p><h3>Relevant experience</h3><p>Built a Python application to organise research data, with a focus on clear reporting and usability.</p><div class="cv-line"></div><div class="cv-line short"></div></div>
-            <div class="preview-note">Your experience, tailored to the role. Always yours to check and edit.</div>
+            <div class="next-action"><span class="check-circle">{{ check() }}</span><div><strong>You’ve got a second pair of eyes.</strong><p>A new role was shared with you.</p></div></div>
           </div>
           <div id="panel-calendar" class="preview-panel" role="tabpanel" aria-labelledby="tab-calendar" tabindex="0" hidden>
             <div class="preview-heading"><div><p>A little headspace</p><h2>Know what’s next.<br>And by when.</h2></div></div>
@@ -60,7 +54,7 @@
           </div>
           <div class="workspace-bottom"><span class="privacy-dot" aria-hidden="true"></span>A private space for your next chapter.</div>
         </div>
-        <div class="review-slip"><span class="review-avatar">S</span><div><strong>A little encouragement goes a long way.</strong><span>Share a role. Review a CV. Be there.</span></div></div>
+        <div class="review-slip"><span class="review-avatar">S</span><div><strong>A little encouragement goes a long way.</strong><span>Share a role. Check in. Be there.</span></div></div>
       </div>
       <div class="hero-foot"><span>{{ check() }} Your applications, organised</span><span>{{ check() }} CVs with a second pair of eyes</span><span>{{ check() }} Every deadline in view</span></div>
     </div>
@@ -70,7 +64,7 @@
     <div class="section-heading"><h2 id="journey-title">Less keeping tabs.<br><em>More moving forward.</em></h2><p>One place for the small steps that lead to something bigger.</p></div>
     <ol class="journey-steps">
       <li><span class="step-number">01</span><div><h3>Find your possibilities.</h3><p>Browse the shared Job Board, save a role that catches your eye, or add an opportunity you found elsewhere.</p></div><span class="step-detail">Job Board {{ arrow() }} Tracker</span></li>
-      <li><span class="step-number">02</span><div><h3>Put your experience forward.</h3><p>Start with your core CV. Tailor it to a role with AI assistance, make it your own, and ask an admin for a second look.</p></div><span class="step-detail">Your CV {{ arrow() }} Your story</span></li>
+      <li><span class="step-number">02</span><div><h3>Put your experience forward.</h3><p>Keep your core CV in one place, ready to send whenever the right role appears.</p></div><span class="step-detail">Your CV {{ arrow() }} Your story</span></li>
       <li><span class="step-number">03</span><div><h3>Keep your next step in sight.</h3><p>Track each application from shortlist to offer. See what’s coming up, keep notes and make room for the next opportunity.</p></div><span class="step-detail">Today {{ arrow() }} What’s next</span></li>
     </ol>
   </section>
@@ -78,7 +72,7 @@
   <section class="together" aria-labelledby="together-title">
     <div class="together-inner wrap">
       <div class="together-copy"><h2 id="together-title">Your search.<br><em>In good company.</em></h2><p>A job search can feel like a lot to carry. Job Buddy makes space for the people who want to help—sharing an opportunity, checking a CV, or helping you find your next step.</p><a class="text-link" href="/login">Find your people inside {{ arrow() }}</a></div>
-      <div class="review-example" aria-label="Example CV feedback"><div class="review-meta"><span class="review-avatar">S</span><div><strong>Sam</strong><span>Admin · CV review</span></div><span class="status applied">Approved</span></div><blockquote>“Your project experience really comes through. You’re ready to send this one.”</blockquote><div class="review-bottom"><span>Graduate Developer</span>{{ check() }}</div><p class="example-label">Illustrative review · not a customer testimonial</p></div>
+      <div class="review-example" aria-label="Example note"><div class="review-meta"><span class="review-avatar">S</span><div><strong>Sam</strong><span>Admin · Shared a role</span></div><span class="status shortlisted">Assigned</span></div><blockquote>“This one closes on Friday. It looks like a great fit for you.”</blockquote><div class="review-bottom"><span>Graduate Developer</span>{{ check() }}</div><p class="example-label">Illustrative note · not a customer testimonial</p></div>
     </div>
   </section>
 

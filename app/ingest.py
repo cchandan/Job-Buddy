@@ -8,6 +8,7 @@ Writes ONLY jobs, sync_runs, fetch_state and the run log. It never deletes a job
 status, a hand-set deadline or a CV.
 """
 import logging
+import os
 import re
 import threading
 import time
@@ -406,8 +407,9 @@ def refresh(person_id=None, state=STATE, check_pages=True, stages=None):
             s.commit()
     stopped = state["stop"]
     failed = crashed or bool(cannot) or not summary
-    status = run.finish("failed" if failed else "partial" if stopped else None, pushed=pushed, **summary)
-    if push.configured() and "publish" in stages and not cannot:
+    status = run.finish("failed" if failed else "partial" if stopped else None, pushed=pushed,
+                        **({"refresher": os.environ["JOBBUDDY_REFRESHER"]} if os.getenv("JOBBUDDY_REFRESHER") else {}), **summary)
+    if push.configured():
         try:
             push.send_log(run.id)
         except Exception:

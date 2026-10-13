@@ -177,8 +177,27 @@ def inactivity_for(person, today):
     return None
 
 
-def send_digest(database, today):
+def refresher_alerts(database):
+    """Tell the admins when a refresher that should be refreshing the Board every day has gone quiet: after a day, then every 3 days."""
+    from . import refreshers
     sent = 0
+    if not refreshers.schedule(database)["enabled"]:
+        return 0
+    now = db.utcnow()
+    for row in database.query(db.Refresher):
+        if not refreshers.is_stale(row, now):
+            continue
+        days = (now - (row.last_seen or row.created_at)).days
+        if days >= 1 and (days == 1 or days % 3 == 0):
+            for admin in database.query(db.Person).filter(db.Person.role == "admin"):
+                notify(admin.id, f"{row.name} has gone quiet", f"It hasn't reported for {days} day{'' if days == 1 else 's'}, so the Job Board isn't being refreshed.",
+                       "/admin/refresher", tag=f"refresher-stale-{row.id}")
+            sent += 1
+    return sent
+
+
+def send_digest(database, today):
+    sent = refresher_alerts(database)
     for person in database.query(db.Person).filter(db.Person.role == "user"):
         message = digest_for(database, person, today)
         if message:

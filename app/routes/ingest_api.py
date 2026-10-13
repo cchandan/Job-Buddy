@@ -8,15 +8,17 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import auth, db, ingest, push
+from .. import auth, db, ingest, push, refreshers
 
 router = APIRouter(prefix="/api/ingest")
 
 
-def require_token(request: Request):
+def require_token(request: Request, database=Depends(auth.get_db)):
     want = os.getenv("INGEST_TOKEN") or ""
     sent = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    if len(want) < 20 or not hmac.compare_digest(sent, want):
+    if len(want) >= 20 and hmac.compare_digest(sent, want):
+        return
+    if refreshers.by_token(database, sent) is None:  # a paired refresher has its own secret
         raise HTTPException(status_code=401, detail="Not allowed.")
 
 
@@ -42,6 +44,10 @@ async def jobs(request: Request, database=Depends(auth.get_db)):
         if not row.get("id") or not row.get("title"):
             continue
         row["matched"] = [ids[u] for u in row.get("matched") or [] if u in ids]  # usernames -> this site's ids
+        if "found_by" in row:
+            row["found_by"] = {str(ids[u]): terms for u, terms in (row.get("found_by") or {}).items() if u in ids} or None
+            if row["found_by"] is None:
+                del row["found_by"]
         try:
             with database.begin_nested():  # a savepoint: a row the database rejects is skipped, the rest still go in
                 counts[ingest._upsert(database, row, {}, now)] += 1

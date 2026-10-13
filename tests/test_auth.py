@@ -111,3 +111,20 @@ def test_remove_account_deletes_their_data(people):
     with db.SessionLocal() as s:
         assert s.get(db.Person, temp_id) is None
         assert s.query(db.TrackerEntry).filter(db.TrackerEntry.person_id == temp_id).count() == 0
+
+
+def test_last_active_moves_while_the_cookie_keeps_them_signed_in(people):
+    from datetime import timedelta
+    b = signed_in("wife")
+    with db.SessionLocal() as s:
+        wife = s.query(db.Person).filter_by(username="wife").one()
+        old = db.utcnow() - timedelta(days=5)
+        wife.last_login = old
+        s.commit()
+    assert b.get("/tracker").status_code == 200  # no password typed: the cookie is enough
+    with db.SessionLocal() as s:
+        seen = s.query(db.Person).filter_by(username="wife").one().last_login
+    assert seen > old + timedelta(days=4)
+    assert b.get("/tracker").status_code == 200  # a second visit straight after doesn't write again
+    with db.SessionLocal() as s:
+        assert s.query(db.Person).filter_by(username="wife").one().last_login == seen

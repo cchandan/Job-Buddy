@@ -15,31 +15,57 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/app.css?v=4">
+  <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="/static/auth.css?v=3">
 </head>
-<body class="app login">
-<main class="card">
-  <div>
-    <h1 class="t" style="font-size: 34px">Job Buddy</h1>
-    <p class="sub" style="font-size: 16px; margin-top: 8px">Welcome back. Find jobs, track your applications and stay ahead of every deadline, together.</p>
-  </div>
-  {% if error %}<div class="flash flash--bad" role="alert">{{ error }}</div>{% endif %}
-  {% if flash %}<div class="flash {{ 'flash--bad' if flash[0] == 'bad' }}" role="status">{{ flash[1] }}</div>{% endif %}
-  <form method="post" action="/login" class="stack">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input type="hidden" name="next" value="{{ next }}">
-    <div class="field"><label class="lab" for="username">Username</label>
-      <input id="username" name="username" class="input" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus value="{{ username }}"></div>
-    <div class="field"><label class="lab" for="password">Password</label>
-      <div class="pw">
-        <input id="password" name="password" type="password" class="input" autocomplete="current-password" required>
-        <button type="button" class="btn" id="show" aria-pressed="false">Show</button>
-      </div></div>
-    <button class="btn btn--primary" style="min-height: 52px; font-size: 16px">Sign in</button>
-  </form>
-  <p class="by">Forgotten your password? Ask an admin for a new one. New here? <a href="/signup">Request an account</a>: an admin approves every new account.</p>
-</main>
+<body class="auth">
+<div class="auth-shell">
+  <aside class="auth-brand">
+    <a class="auth-logo" href="/" aria-label="Job Buddy home"><span class="mark" aria-hidden="true">jb<span>.</span></span>Job Buddy</a>
+    <div class="auth-pitch">
+      <p class="auth-headline">Big next step.<br>Better <em>together.</em></p>
+      <p class="auth-lead">Find the jobs, keep track of every deadline, and keep moving forward with your people beside you.</p>
+      <ul class="auth-points">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> One place for every job, deadline and application.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> Your own Tracker, and a Calendar that never lets a closing date slip by.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> Family and admins who can send you jobs and help along the way.</li>
+      </ul>
+    </div>
+    <p class="auth-foot">A private workspace. Nothing is visible until you are signed in.</p>
+  </aside>
+  <main class="auth-panel">
+    <section class="auth-card" aria-labelledby="page-title">
+      <div>
+        <h1 class="auth-title" id="page-title">Welcome back</h1>
+        <p class="auth-sub">Sign in to your workspace.</p>
+      </div>
+      {% if error %}<div class="alert alert--bad" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg><span>{{ error }}</span></div>{% endif %}
+      {% if flash %}<div class="alert {{ 'alert--bad' if flash[0] == 'bad' else 'alert--ok' }}" role="status"><span>{{ flash[1] }}</span></div>{% endif %}
+      <form method="post" action="/login" class="auth-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" class="input" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus value="{{ username }}">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="pw">
+            <input id="password" name="password" type="password" class="input" autocomplete="current-password" required>
+            <button type="button" class="pw-toggle" id="show" aria-pressed="false" aria-controls="password">Show</button>
+          </div>
+        </div>
+        <button class="btn btn--primary">Sign in</button>
+      </form>
+      <p class="fine">Forgotten your password? Ask an admin for a new one.</p>
+      <div class="auth-or" role="separator"><span>New to Job Buddy?</span></div>
+      <div class="newhere">
+        <a class="btn btn--ghost" href="/signup">Request an account <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></a>
+        <p class="fine">An admin approves every new account, so it can take a little while.</p>
+      </div>
+    </section>
+  </main>
+</div>
 <script>
   var show = document.getElementById("show"), pw = document.getElementById("password");
   show.addEventListener("click", function () {
@@ -47,6 +73,7 @@
     pw.type = on ? "text" : "password";
     show.textContent = on ? "Hide" : "Show";
     show.setAttribute("aria-pressed", on);
+    pw.focus();
   });
 </script>
 </body>

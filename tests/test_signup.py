@@ -45,7 +45,7 @@ def test_the_public_pages_offer_it(browser):
 def test_a_request_creates_nothing_until_approved(people, browser):
     r = ask(browser)
     assert r.status_code == 303 and r.headers["location"] == "/signup/sent"
-    assert "Your request has been sent" in browser.get("/signup/sent").text
+    assert "Request sent" in browser.get("/signup/sent").text
     assert requests_waiting() == [("Priya Patel", "priya.p")]  # the username is lowercased
     assert people_named("priya.p") == 0
     other = Browser()

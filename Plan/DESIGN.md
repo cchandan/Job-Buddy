@@ -58,14 +58,22 @@ The sidebar footer shows the signed-in person's name and initials, their role, a
 
 ---
 
-## 1. Sign-in
-The front door, and the only page anyone sees signed out. It should feel welcoming, not like a gate.
+## 1. Sign-in and sign-up
+The front door, and the only pages anyone sees signed out. They should feel welcoming, not like a gate. Both share one layout and one stylesheet (`app/static/auth.css`): a brand panel on the left (the "jb." mark, the headline, three plain benefits) and the form on the right. On a phone the brand panel shrinks to a banner and the form sits on a card over it.
 
-- Product name and one warm line saying what Job Buddy is for.
-- Username and password fields, with a show/hide control on the password, and a **Sign in** button.
-- "Forgotten your password? Ask Chandan or Dad for a new one." There is no sign-up link and no reset-by-email.
+**Sign-in**
+- "Welcome back", username and password fields, a show/hide control inside the password field, and a **Sign in** button.
+- Below it, a clearly visible secondary button, **Request an account**, with the line "An admin approves every new account." It is a real button, never a small link.
+- "Forgotten your password? Ask an admin for a new one." There is no reset-by-email.
 - **Wrong details:** one plain line, "That username or password isn't right," which never says which one.
 - **Too many tries:** "Too many attempts. Try again in a few minutes."
+- **Signed up but not yet approved:** "Your sign-up is waiting for an admin to approve it. Please try again later."
+
+**Request an account**
+- Name, username (with its rules in a hint), password with a rough strength meter and a live "the two passwords match" check, and **Send my request**. A **Sign in instead** button sits below.
+- After sending: a "Request sent" page with the two steps that follow (an admin looks, then sign in with the password you chose).
+- If an admin has closed sign-up: "Sign-up is closed" with a way back to sign-in.
+- Errors appear in one red banner at the top of the form (announced to screen readers), and what was typed is kept, except passwords.
 
 After signing in, a user goes to Home and an admin to Admin home. A signed-out visit to any other page comes here first and then returns to that page.
 

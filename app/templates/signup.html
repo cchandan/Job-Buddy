@@ -15,38 +15,110 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/app.css?v=4">
+  <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="/static/auth.css?v=3">
 </head>
-<body class="app login">
-<main class="card">
-  <div>
-    <h1 class="t" style="font-size: 34px">Job Buddy</h1>
-    <p class="sub" style="font-size: 16px; margin-top: 8px">Request an account. An admin will look at it and approve it.</p>
-  </div>
-  {% if sent %}
-  <div class="flash" role="status">Thanks. Your request has been sent. You can sign in once an admin approves it, using the username and password you just chose.</div>
-  <a class="btn btn--primary" href="/login" style="min-height: 52px; font-size: 16px">Go to sign in</a>
-  {% elif closed %}
-  <div class="flash flash--bad" role="status">Sign-up is closed at the moment. Please ask an admin directly.</div>
-  <a class="btn" href="/login">Back to sign in</a>
-  {% else %}
-  {% if error %}<div class="flash flash--bad" role="alert">{{ error }}</div>{% endif %}
-  <form method="post" action="/signup" class="stack">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="field"><label class="lab" for="name">Your name</label>
-      <input id="name" name="name" class="input" maxlength="80" autocomplete="name" required autofocus value="{{ values.get('name', '') }}"></div>
-    <div class="field"><label class="lab" for="username">Choose a username (letters, numbers, dots or dashes)</label>
-      <input id="username" name="username" class="input" minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" required value="{{ values.get('username', '') }}"></div>
-    <div class="field"><label class="lab" for="password">Choose a password (at least 10 characters)</label>
-      <input id="password" name="password" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required></div>
-    <div class="field"><label class="lab" for="again">Password again</label>
-      <input id="again" name="again" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required></div>
-    <div aria-hidden="true" style="position: absolute; left: -9999px"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
-    <button class="btn btn--primary" style="min-height: 52px; font-size: 16px">Send my request</button>
-  </form>
-  <p class="by">Already approved? <a href="/login">Sign in</a>. Job Buddy is private: nothing is visible until an admin says yes.</p>
-  {% endif %}
-</main>
+<body class="auth">
+<div class="auth-shell">
+  <aside class="auth-brand">
+    <a class="auth-logo" href="/" aria-label="Job Buddy home"><span class="mark" aria-hidden="true">jb<span>.</span></span>Job Buddy</a>
+    <div class="auth-pitch">
+      <p class="auth-headline">Join your<br><em>people.</em></p>
+      <p class="auth-lead">Ask for an account in a minute. An admin looks at every request, so Job Buddy stays private to the people who should be here.</p>
+      <ul class="auth-points">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> One place for every job, deadline and application.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> Your own Tracker, and a Calendar that never lets a closing date slip by.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg> Family and admins who can send you jobs and help along the way.</li>
+      </ul>
+    </div>
+    <p class="auth-foot">A private workspace. Nothing is visible until you are signed in.</p>
+  </aside>
+  <main class="auth-panel">
+    <section class="auth-card" aria-labelledby="page-title">
+      {% if sent %}
+      <span class="badge-ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></span>
+      <div>
+        <h1 class="auth-title" id="page-title">Request sent</h1>
+        <p class="auth-sub">Thanks. Nothing else to do for now.</p>
+      </div>
+      <ol class="steps">
+        <li><div><strong>An admin looks at your request</strong><span>It can take a little while, so check back later.</span></div></li>
+        <li><div><strong>Once it's approved, sign in</strong><span>Use the username and password you just chose.</span></div></li>
+      </ol>
+      <a class="btn btn--primary" href="/login">Go to sign in <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></a>
+      {% elif closed %}
+      <div>
+        <h1 class="auth-title" id="page-title">Sign-up is closed</h1>
+        <p class="auth-sub">New accounts aren't being accepted at the moment. Please ask an admin directly.</p>
+      </div>
+      <a class="btn btn--ghost" href="/login">Back to sign in</a>
+      {% else %}
+      <div>
+        <h1 class="auth-title" id="page-title">Request an account</h1>
+        <p class="auth-sub">Choose your own username and password. An admin approves it before you can sign in.</p>
+      </div>
+      {% if error %}<div class="alert alert--bad" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg><span>{{ error }}</span></div>{% endif %}
+      <form method="post" action="/signup" class="auth-form" id="signup">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="name">Your name</label>
+          <input id="name" name="name" class="input" maxlength="80" autocomplete="name" required autofocus value="{{ values.get('name', '') }}">
+        </div>
+        <div class="field">
+          <label for="username">Choose a username</label>
+          <input id="username" name="username" class="input" minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required value="{{ values.get('username', '') }}" aria-describedby="u-hint">
+          <span class="hint" id="u-hint">Letters, numbers, dots or dashes. At least 3 characters.</span>
+        </div>
+        <div class="field">
+          <label for="password">Choose a password</label>
+          <div class="pw">
+            <input id="password" name="password" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required aria-describedby="p-hint">
+            <button type="button" class="pw-toggle" id="show" aria-pressed="false" aria-controls="password">Show</button>
+          </div>
+          <div class="meter" id="meter" data-level="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <span class="meter-text" id="p-hint" role="status" aria-live="polite">At least 10 characters. A few random words work well.</span>
+        </div>
+        <div class="field">
+          <label for="again">Password again</label>
+          <input id="again" name="again" type="password" class="input" minlength="10" maxlength="200" autocomplete="new-password" required>
+          <span class="hint" id="match" role="status" aria-live="polite"></span>
+        </div>
+        <div class="trap" aria-hidden="true"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button class="btn btn--primary">Send my request</button>
+      </form>
+      <div class="auth-or" role="separator"><span>Already approved?</span></div>
+      <a class="btn btn--ghost" href="/login">Sign in instead</a>
+      {% endif %}
+    </section>
+  </main>
+</div>
+{% if not sent and not closed %}
+<script>
+  var show = document.getElementById("show"), pw = document.getElementById("password"), again = document.getElementById("again");
+  var meter = document.getElementById("meter"), text = document.getElementById("p-hint"), match = document.getElementById("match");
+  show.addEventListener("click", function () {
+    var on = pw.type === "password";
+    pw.type = on ? "text" : "password";
+    again.type = pw.type;
+    show.textContent = on ? "Hide" : "Show";
+    show.setAttribute("aria-pressed", on);
+  });
+  function level(v) {  // a rough guide only: the real rule is the 10 characters the server checks
+    if (v.length === 0) return 0;
+    if (v.length < 10) return 1;
+    var kinds = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(function (r) { return r.test(v); }).length;
+    if (v.length >= 20 || (v.length >= 16 && kinds === 4)) return 4;  // long phrases and mixed characters earn "Strong"
+    return v.length >= 14 ? 3 : 2;
+  }
+  var WORDS = ["", "Too short: at least 10 characters.", "OK. Longer is better.", "Good.", "Strong."];
+  function check() {
+    var l = level(pw.value);
+    meter.setAttribute("data-level", l);
+    text.textContent = pw.value ? WORDS[l] : "At least 10 characters. A few random words work well.";
+    match.textContent = again.value ? (again.value === pw.value ? "The two passwords match." : "The two passwords don't match yet.") : "";
+  }
+  pw.addEventListener("input", check); again.addEventListener("input", check);
+</script>
+{% endif %}
 </body>
 </html>

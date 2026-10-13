@@ -11,7 +11,7 @@ def _entry_for(browser, title="Private job"):
 
 def test_user_cannot_open_admin_pages(people):
     wife = signed_in("wife")
-    for url in ("/admin", "/admin/review", "/admin/sync", f"/admin/users/{people['brother']}/tracker",
+    for url in ("/admin", "/admin/sync", f"/admin/users/{people['brother']}/tracker",
                 f"/admin/users/{people['brother']}/profile", f"/admin/users/{people['brother']}/calendar",
                 f"/admin/users/{people['brother']}/cv/download"):
         assert wife.get(url).status_code == 403, url
@@ -23,11 +23,11 @@ def test_user_cannot_reach_another_users_entry(people):
     brother = signed_in("brother")
     entry_id = _entry_for(brother)
     wife = signed_in("wife")
-    for url in (f"/tracker/{entry_id}", f"/tracker/{entry_id}/cv", f"/tracker/{entry_id}/edit", f"/tracker/{entry_id}/cv/print"):
+    for url in (f"/tracker/{entry_id}", f"/tracker/{entry_id}/edit"):
         assert wife.get(url).status_code == 403, url
     for url, data in ((f"/tracker/{entry_id}/status", {"status": "applied"}), (f"/tracker/{entry_id}/remove", {}),
                       (f"/tracker/{entry_id}/deadline", {"deadline": "2026-11-01"}), (f"/tracker/{entry_id}/notes", {"notes": "hi"}),
-                      (f"/tracker/{entry_id}/cv/create", {}), (f"/tracker/{entry_id}/apply", {})):
+                      (f"/tracker/{entry_id}/apply", {})):
         assert wife.post(url, data).status_code == 403, url
     with db.SessionLocal() as s:
         entry = s.get(db.TrackerEntry, entry_id)

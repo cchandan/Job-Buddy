@@ -1,8 +1,8 @@
 """The ONLY file that talks to the AI provider (today: Gemma 4 through the Gemini API).
 
-`ask_json(prompt, schema)` returns a validated object; `ask_text(prompt)` returns plain text. Both raise
+`ask_json(prompt, schema)` returns a validated object and raises
 `AIUnavailable` / `AILimitReached`. Nothing outside this file may depend on which provider is used.
-Prompts contain CV text, so they are never logged.
+Prompts can contain advert or CV text, so they are never logged.
 """
 import json
 import os
@@ -58,8 +58,8 @@ def _call_model(prompt):
 
 
 # ---------- backends for job tagging (laptop only) ----------
-# Tagging tries these in order and uses the first that works, so no paid API is needed. CV tailoring on the live site
-# keeps using Gemini only. A backend that hits a limit is skipped for the rest of the run.
+# Tagging tries these in order and uses the first that works, so no paid API is needed. On the live site
+# only Gemini is used. A backend that hits a limit is skipped for the rest of the run.
 ALL_BACKENDS = ("claude", "codex", "ollama", "gemini")
 _order = list(ALL_BACKENDS)  # the admin can change this on the Jobs sync page
 CLAUDE_MODEL = os.getenv("TAGGING_CLAUDE_MODEL", "haiku")
@@ -258,16 +258,6 @@ def ask_json(prompt, schema, count=True, backends=None):
     if backends is not None:
         return _ask_backends(full_prompt, use, backends)
     return _ask(full_prompt, use, count)
-
-
-def ask_text(prompt, count=True):
-    """Ask for plain text (the tailored CV)."""
-    def use(text):
-        text = re.sub(r"^```\w*\n|\n```\s*$", "", (text or "").strip()).strip()
-        if len(text) < 80:
-            raise ValueError("too short")
-        return text
-    return _ask(prompt, use, count)
 
 
 def _is_auth_error(e):

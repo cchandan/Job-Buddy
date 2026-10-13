@@ -1,16 +1,16 @@
 # Job Buddy
 
-A private job-application workspace for a family. Find jobs on a shared Job Board, shortlist them into your own Tracker, create a CV tailored to each one, apply, and keep track of deadlines and outcomes.
+A private job-application workspace for a family. Find jobs on a shared Job Board, shortlist them into your own Tracker, apply, and keep track of deadlines and outcomes.
 
 Built from the CareerOS hackathon project. `Plan/` holds the spec, design and build plan.
 
 ## What it does
 - **Home**: the page you land on after signing in. It shows what needs doing next; admins get their own version.
 - **Job Board**: live jobs fetched by an admin, tagged, each with a deadline and status. Shortlist the ones you want.
-- **Tracker**: your shortlisted and assigned jobs, plus any you add by link or by hand. Set the status (Applied, Interviewing, Rejected and so on), create a tailored CV, and jump to the advert to apply.
+- **Tracker**: your shortlisted and assigned jobs, plus any you add by link or by hand. Set the status (Applied, Interviewing, Rejected and so on), and jump to the advert to apply.
 - **Calendar**: every deadline from your Tracker.
-- **Profile**: your core CV, the base for each tailored CV.
-- **Admin**: see each user's sections, assign jobs to them, review their tailored CVs, fetch and sync the day's jobs, and create accounts.
+- **Profile**: your core CV, kept ready to send.
+- **Admin**: see each user's sections, assign jobs to them, fetch and sync the day's jobs, and create accounts.
 
 ## Who can use it
 Sign-in is with a username and password. There is no sign-up: an admin creates each account, and Job Buddy generates the password for the admin to pass on. There are two roles: **users** (job seekers) and **admins**.
@@ -28,10 +28,10 @@ Sign-in is with a username and password. There is no sign-up: an admin creates e
 |---|---|
 | `DATABASE_URL` | Postgres connection string. Leave unset to use a local SQLite file (`jobbuddy.db`) for local play and tests |
 | `SESSION_SECRET` | Signs the sign-in cookie; any long random string |
-| `GEMINI_API_KEY`, `GEMMA_MODEL` | The AI used to read adverts and write tailored CVs |
+| `GEMINI_API_KEY`, `GEMMA_MODEL` | The AI used to read adverts |
 | `AI_DAILY_LIMIT` | Daily cap on AI calls |
 
-Without an AI key the Job Board, Tracker, Calendar and Profile still work; only tailored CVs and AI tagging are unavailable.
+Without an AI key the Job Board, Tracker, Calendar and Profile still work; only AI tagging is unavailable.
 
 ## Refresh the jobs (admins, on your own laptop)
 Job sites block cloud servers, so refreshing runs on a laptop, not on the live site.
@@ -51,6 +51,6 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 Create a Render web service from `render.yaml` and set the settings above. Use the Supabase **pooled** connection string for `DATABASE_URL`. Each deploy runs `alembic upgrade head`, which creates or updates the tables. Then run `python scripts/create_admin.py` once against the live database to make the first admin account.
 
 ## Privacy
-Job Buddy stores each user's core CV and tailored CVs in its database so they can be reused. CV text is sent to the AI provider when a tailored CV is created. Admins can see users' CVs and Trackers. A user can delete their CVs at any time. Nothing is visible without signing in.
+Job Buddy stores each user's core CV in its database. Admins can see users' CVs and Trackers. A user can delete their CV at any time. Nothing is visible without signing in.
 
 Credits: [JobSpy](https://github.com/speedyapply/JobSpy) for fetching listings.

@@ -13,7 +13,6 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 STATUS_LABELS = {"shortlisted": "Shortlisted", "applied": "Applied", "interviewing": "Interviewing", "offer": "Offer",
                  "rejected": "Rejected", "withdrawn": "Withdrawn"}
-CV_LABELS = {"draft": "Draft", "in_review": "In review", "approved": "Approved", "changes_requested": "Changes requested"}
 MODE_LABELS = {"remote": "Remote", "hybrid": "Hybrid", "onsite": "Onsite"}
 SPONSOR_LABELS = {"sponsors": "Sponsors visas", "no_sponsorship": "No sponsorship", "unclear": "Sponsorship unclear"}
 
@@ -63,7 +62,7 @@ def added_by(entry, viewer):
 
 
 templates.env.globals.update(
-    STATUS_LABELS=STATUS_LABELS, CV_LABELS=CV_LABELS, MODE_LABELS=MODE_LABELS, SPONSOR_LABELS=SPONSOR_LABELS,
+    STATUS_LABELS=STATUS_LABELS, MODE_LABELS=MODE_LABELS, SPONSOR_LABELS=SPONSOR_LABELS,
     LISTING_LABELS=deadlines.LISTING_LABELS, STATUSES=db.STATUSES, salary=salary, added_by=added_by,
     chip_for=deadlines.chip, listing_status=deadlines.listing_status)
 templates.env.filters.update(dmy=dmy, when=when, money=money)
@@ -75,14 +74,10 @@ def flash(request, message, kind="ok"):
 
 def page(request, name, person, active="", status_code=200, **ctx):
     """Render a template with everything the shell needs."""
-    waiting = 0
-    if person is not None and person.is_admin:  # the count beside "Review CVs" in the sidebar
-        with db.SessionLocal() as s:
-            waiting = s.query(db.TailoredCV).filter(db.TailoredCV.status == "in_review").count()
     ctx.pop("database", None)
     ctx.setdefault("viewing", None)
     has_session = "session" in request.scope  # missing only on the last-resort error page
-    ctx.update(person=person, active=active, today=today(), waiting=waiting,
+    ctx.update(person=person, active=active, today=today(),
                csrf=auth.csrf_token(request) if has_session else "",
                flash=request.session.pop("flash", None) if has_session else None)
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)

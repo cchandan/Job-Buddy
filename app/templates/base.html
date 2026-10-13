@@ -31,12 +31,12 @@
   <a href="/" class="mark">Job Buddy</a>
   <div class="nav">
     {% if person.is_admin %}
-      {% set links = [("admin", "Admin home", "/admin"), ("board", "Job Board", "/board"), ("sync", "Jobs sync", "/admin/sync")] %}
+      {% set links = [("admin", "Admin home", "/admin"), ("board", "Job Board", "/board"), ("sync", "Jobs sync", "/admin/sync"), ("bin", "Bin", "/admin/bin")] %}
     {% else %}
       {% set links = [("home", "Home", "/"), ("board", "Job Board", "/board"), ("tracker", "Tracker", "/tracker"), ("calendar", "Calendar", "/calendar"), ("profile", "Profile", "/profile")] %}
     {% endif %}
     {% for key, label, href in links %}
-    <a href="{{ href }}" {% if active == key %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
+    <a href="{{ href }}" {% if active == key %}class="on" aria-current="page"{% endif %}>{{ label }}{% if key == "bin" and bin_count %} <span class="count">{{ bin_count }}</span>{% endif %}</a>
     {% endfor %}
   </div>
   <div class="who">

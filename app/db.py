@@ -123,6 +123,11 @@ class Job(Base):
     last_checked = Column(DateTime)             # last time its page was checked directly
     closed_at = Column(DateTime)
     close_reason = Column(String(60), default="")
+    # The bin (jobbin.py): hidden from the Job Board, never deleted, and never touching anyone's Tracker
+    binned_at = Column(DateTime)
+    bin_reason = Column(String(200), default="")
+    bin_kept = Column(Boolean, default=False)   # an admin restored it on purpose: it is never binned automatically again
+    found_by = Column(JSON)                     # {person id: [the search terms that found it]}: tells which searches still matter
 
 
 class StagedJob(Base):

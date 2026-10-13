@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field with context %}
+{% block title %}Bin{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Bin</h1>
+    <p class="sub">Expired jobs, and jobs that no longer match any search. They are hidden from the Job Board. Nothing is ever deleted, and nobody's Tracker is touched.</p>
+  </div>
+</div>
+
+{% set e, r = cand.expired|length, cand.irrelevant|length %}
+<section class="card stack" aria-label="Ready to move to the bin">
+  <h2 class="t2">Ready to move to the bin</h2>
+  {% if e or r %}
+  <p>{{ e }} expired job{{ '' if e == 1 else 's' }} and {{ r }} no longer relevant job{{ '' if r == 1 else 's' }} are still on the Job Board.</p>
+  {% if e %}
+  <details><summary><strong>{{ e }} expired</strong> <span class="by">· page gone, marked closed, or closing date passed</span></summary>
+    <ul class="tight" style="list-style: none; padding: 0">{% for job, why in cand.expired[:50] %}<li><a class="lnk" href="/board/{{ job.id }}">{{ job.title }}</a> <span class="by">· {{ job.company }} · {{ why }}</span></li>{% endfor %}{% if e > 50 %}<li class="by">…and {{ e - 50 }} more</li>{% endif %}</ul></details>
+  {% endif %}
+  {% if r %}
+  <details><summary><strong>{{ r }} no longer relevant</strong> <span class="by">· found only by keywords you removed</span></summary>
+    <ul class="tight" style="list-style: none; padding: 0">{% for job, why in cand.irrelevant[:50] %}<li><a class="lnk" href="/board/{{ job.id }}">{{ job.title }}</a> <span class="by">· {{ job.company }} · {{ why }}</span></li>{% endfor %}{% if r > 50 %}<li class="by">…and {{ r - 50 }} more</li>{% endif %}</ul></details>
+  {% endif %}
+  <form method="post" action="/admin/bin/tidy">{{ csrf_field() }}<button class="btn btn--primary">Move {{ e + r }} job{{ '' if e + r == 1 else 's' }} to the bin</button></form>
+  {% else %}
+  <p class="sub">Nothing to move. The Job Board is tidy.</p>
+  {% endif %}
+  <p class="by">Jobs someone is tracking are never moved for being off-topic.{% if cand.unknown %} {{ cand.unknown }} older job{{ '' if cand.unknown == 1 else 's' }} can't be judged yet, because they were found before Job Buddy recorded which search found them; they get judged as scrapes find them again.{% endif %}</p>
+</section>
+
+<section class="card stack" aria-label="In the bin">
+  <div class="head">
+    <h2 class="t2">In the bin <span class="by">· {{ all_count }}</span></h2>
+    <div class="rowx">
+      <a class="btn {{ 'btn--primary' if not kind }}" href="/admin/bin">All</a>
+      <a class="btn {{ 'btn--primary' if kind == 'expired' }}" href="/admin/bin?kind=expired">Expired</a>
+      <a class="btn {{ 'btn--primary' if kind == 'relevance' }}" href="/admin/bin?kind=relevance">No longer relevant</a>
+    </div>
+  </div>
+  {% if rows %}
+  <form method="post" action="/admin/bin/restore" class="stack">
+    {{ csrf_field() }}
+    <div class="scroll"><table class="tb">
+      <thead><tr><th style="width: 36px"><input type="checkbox" id="all" aria-label="Select all"></th><th>Job</th><th>Why it's here</th><th>Binned</th></tr></thead>
+      <tbody>{% for job in rows %}<tr>
+        <td><input type="checkbox" name="job" value="{{ job.id }}" aria-label="Select {{ job.title }}"></td>
+        <td><a class="lnk" href="/board/{{ job.id }}">{{ job.title }}</a><div class="by">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}</div></td>
+        <td>{{ job.bin_reason }}</td><td>{{ job.binned_at|when }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if total > rows|length %}<p class="by">Showing the latest {{ rows|length }} of {{ total }}.</p>{% endif %}
+    <div class="rowx"><button class="btn">Restore selected</button><span class="by">Restored jobs go back on the Job Board and are never binned automatically again.</span></div>
+  </form>
+  {% else %}<p class="sub">The bin is empty.</p>{% endif %}
+  <p class="by">Manage the bin on the machine you scrape from. Publishing sends what's in the bin to the live site.</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  var all = document.getElementById("all");
+  if (all) all.addEventListener("change", function () {
+    document.querySelectorAll('input[name="job"]').forEach(function (c) { c.checked = all.checked; });
+  });
+</script>
+{% endblock %}

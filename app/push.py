@@ -58,9 +58,10 @@ def _post(path, payload):
         return r.json()
 
 
-def signature(content_hash, matched_usernames):
-    """What the manifest compares: the advert's version plus who it is for, so a new match is sent even if the advert is unchanged."""
-    return f"{content_hash or ''}|{','.join(sorted(matched_usernames))}"
+def signature(content_hash, matched_usernames, binned=False):
+    """What the manifest compares: the advert's version plus who it is for, so a new match is sent even if the advert is unchanged.
+    Being in the bin counts too, so putting a job in or out of the bin reaches the live site."""
+    return f"{content_hash or ''}|{','.join(sorted(matched_usernames))}" + ("|binned" if binned else "")
 
 
 def job_dict(job, usernames=None):
@@ -69,6 +70,9 @@ def job_dict(job, usernames=None):
     out = {f: getattr(job, f) for f in db.JOB_FIELDS}
     out["matched"] = sorted(usernames[i] for i in (job.matched or []) if usernames and i in usernames)
     out["deadline"] = job.deadline.isoformat() if job.deadline else None
+    binned = getattr(job, "binned_at", None)
+    out["binned_at"] = binned.isoformat() if binned else None
+    out["bin_reason"] = getattr(job, "bin_reason", "") or ""
     return out
 
 
@@ -95,7 +99,7 @@ def publish(database, run, stop=lambda: False):
         raise PushError("the live site did not wake up (still answering errors after about 2 minutes)")
     jobs = database.query(db.Job).all()
     usernames = {p.id: p.username for p in database.query(db.Person)}
-    need = set(_post("manifest", {"hashes": {j.id: signature(j.content_hash, job_dict(j, usernames)["matched"]) for j in jobs}})["need"])
+    need = set(_post("manifest", {"hashes": {j.id: signature(j.content_hash, job_dict(j, usernames)["matched"], bool(getattr(j, "binned_at", None))) for j in jobs}})["need"])
     by_id = {j.id: j for j in jobs}
     sent, skipped = 0, []
     ordered = [by_id[i] for i in need if i in by_id]
@@ -106,7 +110,7 @@ def publish(database, run, stop=lambda: False):
         batch = ordered[i:i + BATCH]
         sent += _send_jobs(batch, usernames, skipped)
     recent = db.utcnow() - timedelta(hours=6)
-    seen = [j.id for j in jobs if j.id not in need and j.last_seen and j.last_seen >= recent and not j.closed_at]
+    seen = [j.id for j in jobs if j.id not in need and j.last_seen and j.last_seen >= recent and not j.closed_at and not getattr(j, "binned_at", None)]
     for i in range(0, len(seen), 500):
         _post("seen", {"ids": seen[i:i + 500]})
     closed = [{"id": j.id, "reason": j.close_reason or "", "at": j.closed_at.isoformat()} for j in jobs if j.closed_at]

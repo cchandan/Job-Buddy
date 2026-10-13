@@ -50,9 +50,9 @@ def user_home(database, person, today):
     do_next.sort(key=lambda item: item["rank"])
 
     since = person.last_board_visit
-    q = database.query(db.Job)
+    q = database.query(db.Job).filter(db.Job.binned_at.is_(None))
     new_jobs = q.filter(db.Job.first_seen > since).count() if since else q.count()
-    open_jobs = [j for j in database.query(db.Job).filter(db.Job.deadline >= today).order_by(db.Job.deadline).limit(3)]
+    open_jobs = [j for j in database.query(db.Job).filter(db.Job.binned_at.is_(None), db.Job.deadline >= today).order_by(db.Job.deadline).limit(3)]
 
     week = []
     for offset in range(7):

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, notify, push, runlog, sources, summary, tracking, vault, web
+from .. import ai, auth, db, deadlines, ingest, jobbin, notify, push, runlog, sources, summary, tracking, vault, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -176,6 +176,7 @@ def view_tracker(user_id: int, request: Request, database=Depends(auth.get_db), 
     if q.strip():
         needle = q.strip().lower()
         hits = database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls)).filter(
+            db.Job.binned_at.is_(None),
             or_(func.lower(db.Job.title).contains(needle, autoescape=True),
                 func.lower(db.Job.company).contains(needle, autoescape=True))).limit(200)
         for job in hits:  # the database finds matches; only closed ones are skipped here
@@ -261,6 +262,41 @@ async def assign_from_board(request: Request, database=Depends(auth.get_db), per
     return await assign(user_id, request, database, person)
 
 
+# ---------- the bin ----------
+
+@router.get("/bin")
+def bin_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin), kind: str = ""):
+    query = (database.query(db.Job).options(defer(db.Job.description), defer(db.Job.source_urls))
+             .filter(db.Job.binned_at.isnot(None)))
+    if kind == "expired":
+        query = query.filter(db.Job.bin_reason.like("Expired:%"))
+    elif kind == "relevance":
+        query = query.filter(db.Job.bin_reason.like("No longer relevant%"))
+    return web.page(request, "admin_bin.html", person, "bin", cand=jobbin.candidates(database, web.today()), kind=kind,
+                    total=query.count(), rows=query.order_by(db.Job.binned_at.desc(), db.Job.title).limit(300).all(),
+                    all_count=jobbin.count(database))
+
+
+@router.post("/bin/tidy")
+def bin_tidy(request: Request, database=Depends(auth.get_db)):
+    """Move everything that is expired or no longer relevant to the bin. Nothing is deleted and no Tracker is touched."""
+    cand = jobbin.candidates(database, web.today())
+    jobbin.bin_jobs(database, cand["expired"] + cand["irrelevant"])
+    e, r = len(cand["expired"]), len(cand["irrelevant"])
+    web.flash(request, f"Moved {e} expired and {r} no-longer-relevant job{'' if e + r == 1 else 's'} to the bin. Publish to send this to the live site."
+              if e + r else "Nothing needed moving.")
+    return web.redirect("/admin/bin")
+
+
+@router.post("/bin/restore")
+async def bin_restore(request: Request, database=Depends(auth.get_db)):
+    ids = [str(v) for v in (await request.form()).getlist("job")][:500]
+    n = jobbin.restore(database, ids) if ids else 0
+    web.flash(request, f"Restored {n} job{'' if n == 1 else 's'} to the Job Board. They won't be binned automatically again." if n
+              else "Tick the jobs you want to restore first.", "ok" if n else "bad")
+    return web.redirect("/admin/bin")
+
+
 # ---------- jobs sync ----------
 
 def stage_status(database):
@@ -316,7 +352,10 @@ def sync_profile(person_id: int, request: Request, database=Depends(auth.get_db)
     profile.remote_uk, profile.uk_wide = bool(remote_uk), bool(uk_wide)
     profile.needs_sponsorship, profile.enabled = bool(needs_sponsorship), bool(enabled)
     database.commit()
-    web.flash(request, f"Saved {profile.person.first_name}'s search.")
+    stale = len(jobbin.candidates(database, web.today())["irrelevant"])
+    web.flash(request, f"Saved {profile.person.first_name}'s search."
+              + (f" {stale} job{'' if stale == 1 else 's'} on the Job Board {'was' if stale == 1 else 'were'} found only by keywords that are no longer "
+                 "in anyone's search. Open the Bin to move them there." if stale else ""))
     return web.redirect("/admin/sync")
 
 

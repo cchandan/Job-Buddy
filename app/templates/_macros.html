@@ -20,7 +20,17 @@
   "user-plus": '<circle cx="9" cy="7" r="4"/><path d="M2 21v-1a7 7 0 0 1 14 0v1"/><path d="M19 8v6M16 11h6"/>',
   "computer": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   "check": '<path d="M5 12l5 5 9-10"/>',
-  "chevron": '<path d="m9 6 6 6-6 6"/>'
+  "chevron": '<path d="m9 6 6 6-6 6"/>',
+  "tracker": '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 11h6M9 15h4"/>',
+  "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  "profile": '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/>',
+  "filter": '<path d="M4 6h16M7 12h10M10 18h4"/>',
+  "external": '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  "back": '<path d="m15 6-6 6 6 6"/>',
+  "down": '<path d="m6 9 6 6 6-6"/>',
+  "upload": '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
+  "briefcase": '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M12 11v5M9.5 13.5h5"/>',
+  "tick": '<path d="M9 11l3 3 7-7"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/>'
 } %}<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{{ paths[name]|safe }}</svg>{% endmacro %}
 
 {% macro csrf_field() %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
@@ -41,56 +51,42 @@
 
 {% macro status_options(current) %}{% for s in STATUSES %}<option value="{{ s }}" {{ 'selected' if s == current }}>{{ STATUS_LABELS[s] }}</option>{% endfor %}{% endmacro %}
 
-{# One Tracker entry. `v` comes from summary.entry_view. Read-only when an admin is viewing a user. #}
-{% macro entry_card(v, viewer, readonly, back, admin_user=None) %}
+{# One Tracker entry as a row. `v` comes from summary.entry_view. Read-only when an admin is viewing a user. #}
+{% macro entry_row(v, viewer, readonly, back, admin_user=None) %}
 {% set e = v.entry %}{% set job = v.job %}
 {% set href = ("/admin/users/%s/entry/%s" % (admin_user.id, e.id)) if admin_user else ("/tracker/%s" % e.id) %}
-<article class="card stack {{ 'dim' if v.passed }}">
-  <div class="job">
-    <div class="jmain">
-      <h2 class="jt"><a href="{{ href }}">{{ job.title }}</a></h2>
-      <div class="meta">{{ meta(job) }}</div>
-      <div class="rowx">
-        {{ chip(v.chip) }}
-        {% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}
-        {% if readonly %}{{ status_badge(e.status) }}{% endif %}
-        {% if e.source == "assigned" and e.seen_at is none and not readonly %}<span class="badge b-new">New</span>{% endif %}
-      </div>
-      <div class="by">{{ added_by(e, viewer) }} · {{ e.created_at|dmy }}{% if e.notes %} · Notes: {{ e.notes|truncate(90) }}{% endif %}</div>
+<article class="jrow {{ 'dim' if v.passed }}">
+  <div class="jrow-main">
+    <div class="rowx" style="gap: 8px; align-items: baseline">
+      <h2 class="jt"><a class="plain" href="{{ href }}">{{ job.title }}</a></h2>
+      {% if e.source == "assigned" and e.seen_at is none and not readonly %}<span class="badge b-new badge--sm">New</span>{% endif %}
     </div>
-    <div class="jside">
-      {% if not readonly %}
-      <form method="post" action="/tracker/{{ e.id }}/status">
-        {{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}">
-        <label class="lab" for="status-{{ e.id }}">Status</label>
-        <select id="status-{{ e.id }}" name="status" class="input" data-autosubmit>{{ status_options(e.status) }}</select>
-        <noscript><button class="btn">Save status</button></noscript>
-      </form>
-      <div class="rowx">
-        {% if job.url %}
-        <form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>
-          {{ csrf_field() }}<button class="btn {{ 'btn--primary' if e.status == 'shortlisted' and not v.passed }}">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button>
-        </form>
-        {% endif %}
-        <a class="btn" href="{{ href }}">Details</a>
-      </div>
-      {% else %}
-      <div class="rowx" style="justify-content: flex-end">
-        {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
-        <a class="btn" href="{{ href }}">Details</a>
-      </div>
-      {% endif %}
+    <div class="meta">{{ meta(job) }}</div>
+    <div class="rowx" style="gap: 8px">
+      {{ chip(v.chip) }}
+      {% if v.passed %}<span class="badge b-flag">Deadline passed</span>{% endif %}
+      <span class="by">{{ added_by(e, viewer) }} · {{ e.created_at|dmy }}{% if e.notes %} · Notes: {{ e.notes|truncate(90) }}{% endif %}</span>
     </div>
   </div>
-  {% if e.apply_clicked_at and e.status == "shortlisted" and not readonly %}
-  <div class="notice">
-    <span>You opened this advert. Did you apply?</span>
-    <span class="rowx">
-      <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
-      <form method="post" action="/tracker/{{ e.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
-    </span>
+  <div class="jrow-side jrow-side--row">
+    {% if not readonly %}
+    <form method="post" action="/tracker/{{ e.id }}/status">
+      {{ csrf_field() }}<input type="hidden" name="next" value="{{ back }}">
+      <label class="vh" for="status-{{ e.id }}">Status for {{ job.title }}</label>
+      <select id="status-{{ e.id }}" name="status" class="selst selst--{{ e.status }}" data-autosubmit>{{ status_options(e.status) }}</select>
+      <noscript><button class="btn">Save status</button></noscript>
+    </form>
+    {% if job.url %}
+    <form method="post" action="/tracker/{{ e.id }}/apply" target="_blank" rel="noopener" data-apply>
+      {{ csrf_field() }}<button class="btn {{ 'btn--primary' if e.status == 'shortlisted' and not v.passed }}">{{ "Apply" if e.status == "shortlisted" else "View advert" }}</button>
+    </form>
+    {% endif %}
+    {% else %}
+    {{ status_badge(e.status) }}
+    {% if job.url %}<a class="btn" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">View advert</a>{% endif %}
+    {% endif %}
+    <a class="iconbtn" href="{{ href }}" aria-label="Details for {{ job.title }}">{{ icon("chevron", 18) }}</a>
   </div>
-  {% endif %}
 </article>
 {% endmacro %}
 

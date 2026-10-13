@@ -1,5 +1,6 @@
 """The Job Board: the shared list of live jobs, and Shortlist."""
 from datetime import date
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
@@ -81,14 +82,39 @@ def board(request: Request, database=Depends(auth.get_db), person=Depends(auth.c
     filters = {"q": q, "status": status, "location": location, "work_mode": work_mode, "sponsorship": sponsorship,
                "seniority": seniority, "sort": sort, "view": "all" if has_profile and not forme else "", "who": who_id or ""}
     query = "&".join(f"{k}={v}" for k, v in filters.items() if v)
+    chips = _chips(filters, {u.id: u.first_name for u in database.query(db.Person).filter(db.Person.role == "user")} if person.is_admin else {})
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all() if person.is_admin else []
     names = {u.id: u.first_name for u in users}
     response = web.page(request, "board.html", person, "board", database=database, rows=shown, total=total, page=page,
-                        pages=pages, filters=filters, query=query, has_profile=has_profile, forme=forme, names=names, last_sync=ingest.last_sync(database),
+                        pages=pages, filters=filters, query=query, chips=chips, has_profile=has_profile, forme=forme, names=names, last_sync=ingest.last_sync(database),
                         board_age=ingest.board_age_days(database, today), users=users)
     person.last_board_visit = db.utcnow()
     database.commit()
     return response
+
+
+STATUS_WORDS = {"closing_soon": "Closing soon", "possibly_closed": "Possibly closed", "closed": "Closed", "all": "All, including closed"}
+MODE_WORDS = {"remote": "Remote", "hybrid": "Hybrid", "onsite": "Onsite"}
+SPONSOR_WORDS = {"sponsors": "Sponsors visas", "unclear": "Sponsorship unclear", "no_sponsorship": "No sponsorship"}
+LEVEL_WORDS = {"graduate": "Graduate", "junior": "Junior", "mid": "Mid", "senior": "Senior"}
+
+
+def _chips(filters, names):
+    """The filters in force, each as (words, the Board address with just that one taken off)."""
+    def without(key):
+        rest = {k: v for k, v in filters.items() if v and k != key and not (k == "status" and v == "open")}
+        return "/board" + ("?" + urlencode(rest) if rest else "")
+    out = []
+    if filters["status"] != "open":
+        out.append((STATUS_WORDS.get(filters["status"], filters["status"]), without("status")))
+    if filters["location"].strip():
+        out.append((f"Near {filters['location'].strip()}", without("location")))
+    for key, words in (("work_mode", MODE_WORDS), ("sponsorship", SPONSOR_WORDS), ("seniority", LEVEL_WORDS)):
+        if filters[key] in words:
+            out.append((words[filters[key]], without(key)))
+    if filters["who"] and names.get(filters["who"]):
+        out.append((f"For {names[filters['who']]}", without("who")))
+    return out
 
 
 def _job(database, job_id):

@@ -72,6 +72,15 @@ def user_home(database, person, today):
     }
 
 
+def user_nav(database, person, today):
+    """What the user sidebar shows beside its links: things to do, new jobs on the Board, new jobs assigned to them."""
+    data = user_home(database, person, today)
+    assigned = database.query(func.count(db.TrackerEntry.id)).filter(
+        db.TrackerEntry.person_id == person.id, db.TrackerEntry.source == "assigned", db.TrackerEntry.seen_at.is_(None),
+        db.TrackerEntry.status == "shortlisted").scalar()
+    return {"todo": len(data["do_next"]), "new_jobs": data["new_jobs"], "assigned": assigned}
+
+
 def _plural(n, word):
     return f"{n} {word}" + ("" if n == 1 else "s")
 

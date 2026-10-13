@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import entry_card, chip, csrf_field, job_fields with context %}
+{% from "_macros.html" import entry_row, chip, csrf_field, job_fields, icon with context %}
 {% block title %}{{ (owner.first_name ~ "'s Tracker") if readonly else "Tracker" }}{% endblock %}
 {% block content %}
 {% set add = request.query_params.get("add", "") %}
@@ -9,14 +9,14 @@
     <p class="sub">{{ total }} job{{ '' if total == 1 else 's' }}</p>
   </div>
   {% if not readonly %}
-  <a class="btn btn--primary" href="/tracker/new">Add job by hand</a>
+  <a class="btn btn--primary" href="/tracker/new">{{ icon("plus", 18) }}Add job by hand</a>
   {% endif %}
 </div>
 
 {% if not readonly %}
 
 {% else %}
-<section class="card stack" aria-label="Assign a job" style="border: 2px solid var(--cobalt)">
+<section class="panel panel--pad panel--accent stack" aria-label="Assign a job">
   <h2 class="t2">Assign a job to {{ owner.first_name }}</h2>
   <p class="by">It will appear in {{ owner.first_name }}'s Tracker as “Assigned by {{ person.first_name }}”.</p>
   <form method="get" action="{{ base }}" class="rowx" style="align-items: flex-end; gap: 12px">
@@ -45,18 +45,31 @@
 </section>
 {% endif %}
 
-<div class="tabs" role="group" aria-label="Filter by status">
+{% if not readonly %}
+{% for v in views if v.entry.apply_clicked_at and v.entry.status == "shortlisted" %}{% if loop.index <= 3 %}
+<section class="notice notice--ask" aria-label="Did you apply?">
+  <span><strong>You opened the advert for {{ v.job.title }}{% if v.job.company %}, {{ v.job.company }}{% endif %}.</strong> Did you apply?</span>
+  <span class="rowx">
+    <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ base }}"><input type="hidden" name="answer" value="yes"><button class="btn btn--primary">Mark as Applied</button></form>
+    <form method="post" action="/tracker/{{ v.entry.id }}/applied">{{ csrf_field() }}<input type="hidden" name="next" value="{{ base }}"><input type="hidden" name="answer" value="no"><button class="btn">Not yet</button></form>
+  </span>
+</section>
+{% endif %}{% endfor %}
+{% endif %}
+
+<div class="rowx" role="group" aria-label="Filter by status" style="gap: 6px">
   {% for key, label in tabs %}
-  <a class="tab {{ 'on' if status == key }}" href="{{ base }}{{ ('?status=' ~ key) if key }}">{{ label }} <span>{{ counts[key] }}</span></a>
+  <a class="tab {{ 'on' if status == key }}" href="{{ base }}{{ ('?status=' ~ key) if key }}">{{ label }} <span class="by">{{ counts[key] }}</span></a>
   {% endfor %}
-  <a class="tab right {{ 'on' if sort == 'added' }}" href="{{ base }}?{{ ('status=' ~ status ~ '&') if status }}sort={{ '' if sort == 'added' else 'added' }}">{{ "Sorted by date added" if sort == "added" else "Sorted by deadline" }}</a>
+  <span class="grow"></span>
+  <a class="tab {{ 'on' if sort == 'added' }}" href="{{ base }}?{{ ('status=' ~ status ~ '&') if status }}sort={{ '' if sort == 'added' else 'added' }}">{{ "Sorted by date added" if sort == "added" else "Sorted by deadline" }}</a>
 </div>
 
-<div class="stack">
+<section class="panel" aria-label="Your jobs">
   {% for v in views %}
-  {{ entry_card(v, person, readonly, base ~ (('?status=' ~ status) if status else ''), viewing) }}
+  {{ entry_row(v, person, readonly, base ~ (('?status=' ~ status) if status else ''), viewing) }}
   {% else %}
-  <div class="card empty">
+  <div class="empty-panel panel--pad">
     {% if total == 0 %}
       <h2 class="t2">Nothing here yet</h2>
       {% if readonly %}<p class="sub">{{ owner.first_name }} hasn't shortlisted anything. Assign a job above to get them started.</p>
@@ -66,6 +79,6 @@
     {% endif %}
   </div>
   {% endfor %}
-</div>
+</section>
 {% if readonly %}<p class="by">Admins can view and assign. Status and notes stay with {{ owner.first_name }}.</p>{% endif %}
 {% endblock %}

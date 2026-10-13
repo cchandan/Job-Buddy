@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Settings</h1>
+    <p class="sub">Things you set once and rarely change.</p>
+  </div>
+</div>
+
+<div class="narrow stack-lg">
+  {% include "_notify.html" %}
+
+  <section class="panel panel--pad rowx" style="justify-content: space-between; gap: 16px" aria-label="Public sign-up">
+    <div class="grow">
+      <h2 class="t2">Public sign-up</h2>
+      <p class="sub">{% if signups_open %}Anyone can ask for an account on the public page. Nothing is created until you approve it in People.{% else %}Closed. Nobody new can ask for an account.{% endif %}</p>
+    </div>
+    <form method="post" action="/admin/signups/toggle" {% if signups_open %}data-confirm="Close public sign-up? Requests already waiting stay in People."{% endif %}>{{ csrf_field() }}<input type="hidden" name="next" value="/admin/settings"><button class="btn">{{ "Close sign-up" if signups_open else "Open sign-up" }}</button></form>
+  </section>
+
+  <section class="panel panel--pad stack" aria-label="My account">
+    <h2 class="t2">My account</h2>
+    <div class="rowx"><span class="av av--lime">{{ person.initial }}</span><div><div class="jt">{{ person.name }}</div><div class="by">{{ person.username }} · Admin</div></div></div>
+    <details class="more ruled" open>
+      <summary class="lnk">Change my password</summary>
+      <form method="post" action="/profile/password" class="stack" style="max-width: 420px">
+        {{ csrf_field() }}
+        <div class="field"><label class="lab" for="current">Current password</label><input id="current" name="current" type="password" class="input" autocomplete="current-password" required></div>
+        <div class="field"><label class="lab" for="new">New password (at least 10 characters)</label><input id="new" name="new" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
+        <div class="field"><label class="lab" for="again">New password again</label><input id="again" name="again" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
+        <div><button class="btn btn--primary">Change password</button></div>
+      </form>
+    </details>
+  </section>
+</div>
+{% endblock %}

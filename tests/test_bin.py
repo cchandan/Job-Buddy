@@ -187,7 +187,7 @@ def test_saving_a_search_says_how_many_jobs_the_removed_keywords_leave_behind(la
     scrape()
     dad = signed_in("dad")
     dad.post(f"/admin/sync/profile/{wife_id()}", {"keywords": "tester", "locations": "Leeds", "enabled": "1"})
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert "1 job on the Job Board was found only by keywords that are no longer in anyone" in page.replace("&#39;", "'")
 
 
@@ -199,9 +199,11 @@ def test_the_bin_page_is_for_admins_and_lists_what_is_inside(people):
         jobbin.sweep_expired(s, TODAY)
     dad = signed_in("dad")
     page = dad.get("/admin/bin").text
-    assert "Gone role" in page and "Expired: page gone (404)" in page and "Restore selected" in page
+    assert "Gone role" in page and "page gone (404)" in page and "Put back on the Board" in page
     assert "Gone role" in dad.get("/admin/bin?kind=expired").text and "Gone role" not in dad.get("/admin/bin?kind=relevance").text
-    assert '<span class="count">1</span>' in dad.get("/admin").text  # the sidebar count
+    assert "ready to tidy" not in dad.get("/admin").text  # nothing is waiting, so no sidebar count
+    make_job("shut2", title="Also gone", closed_at=datetime(2026, 10, 1), close_reason="page gone (404)")  # expired, not yet binned
+    assert 'aria-label="1 ready to tidy"' in dad.get("/admin").text  # the sidebar count is what is waiting to be tidied
     wife = signed_in("wife")
     assert wife.get("/admin/bin").status_code == 403
     assert wife.post("/admin/bin/tidy").status_code == 403 and wife.post("/admin/bin/restore", {"job": ["shut1"]}).status_code == 403

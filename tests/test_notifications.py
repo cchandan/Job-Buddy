@@ -46,7 +46,7 @@ def test_nothing_happens_until_keys_are_set(people):
 def test_turn_on_and_off(people, sent):
     wife, brother = signed_in("wife"), signed_in("brother")
     assert 'id="notify"' in wife.get("/profile").text and "Turn on notifications" in wife.get("/profile").text
-    assert 'id="notify"' in signed_in("dad").get("/admin").text
+    assert 'id="notify"' in signed_in("dad").get("/admin/settings").text
     assert turn_on(wife, endpoint="https://evil.example.com/x").status_code == 400  # only real push services
     assert turn_on(wife, endpoint="http://fcm.googleapis.com/x").status_code == 400
     assert turn_on(wife, p256dh="short").status_code == 400

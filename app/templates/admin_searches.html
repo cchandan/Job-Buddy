@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% block title %}Searches{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Searches</h1>
+    <p class="sub">What each person is looking for. Jobs a search finds go into their "For you" view on the Job Board; everyone can still see everything. Changes are used from the next refresh.</p>
+  </div>
+</div>
+
+{% for p in profiles %}
+{% set n = p.keywords.split(",")|select|list|length if p.keywords else 0 %}
+<details class="panel person" id="p{{ p.person_id }}" {% if p.person_id == open_id %}open{% endif %}>
+  <summary class="person-head">
+    <span class="av av--tint">{{ p.person.initial }}</span>
+    <div class="grow"><h2 class="t2" style="font-size: 19px">{{ p.person.name }}</h2>
+      <div class="by">{{ n }} search{{ '' if n == 1 else 'es' }} · {{ p.locations or "no location" }}{% if p.locations %} within {{ p.distance or 25 }} miles{% endif %}{% if p.uk_wide %} + UK-wide{% endif %}{% if p.remote_uk %} + remote{% endif %}</div></div>
+    {% if p.enabled %}<span class="badge b-ok">Included</span>{% else %}<span class="badge b-none">Off</span>{% endif %}
+    <span class="btn btn--quiet person-toggle">Edit</span>
+  </summary>
+  <form method="post" action="/admin/sync/profile/{{ p.person_id }}" class="person-body stack-lg">
+    {{ csrf_field() }}
+    <div class="stack" style="gap: 10px" data-chips>
+      <div class="rowx" style="justify-content: space-between; align-items: baseline">
+        <label class="t3" for="kw{{ p.person_id }}">Job titles and keywords</label>
+        <span class="by">Take one away and jobs only it found go to the Bin review.</span>
+      </div>
+      <textarea id="kw{{ p.person_id }}" name="keywords" class="input" rows="4" maxlength="3000" data-chips-source>{{ p.keywords or "" }}</textarea>
+      <div class="chip-list" data-chip-list hidden></div>
+      <div class="chip-add" data-chip-add hidden>
+        <label class="vh" for="add{{ p.person_id }}">Add a keyword</label>
+        <input id="add{{ p.person_id }}" class="input" placeholder="Add a job title or keyword" autocomplete="off" data-chip-input>
+        <button type="button" class="btn" data-chip-button>Add</button>
+      </div>
+      <p class="by" data-chips-hint>Separate searches with commas.</p>
+    </div>
+
+    <div class="stack ruled" style="gap: 10px">
+      <h3 class="t3">Where</h3>
+      <div class="rowx" style="align-items: flex-end">
+        <div class="field" style="flex: 3 1 240px"><label class="lab" for="loc{{ p.person_id }}">Places</label><input id="loc{{ p.person_id }}" name="locations" class="input" maxlength="1000" value="{{ p.locations or '' }}"></div>
+        <div class="field" style="flex: 0 1 130px"><label class="lab" for="dist{{ p.person_id }}">Miles around</label><input id="dist{{ p.person_id }}" name="distance" type="number" min="1" max="200" class="input" value="{{ p.distance or 25 }}"></div>
+      </div>
+      <div class="rowx" style="gap: 20px">
+        <label class="check"><input type="checkbox" name="remote_uk" value="1" {{ 'checked' if p.remote_uk }}> UK-wide remote jobs</label>
+        <label class="check"><input type="checkbox" name="uk_wide" value="1" {{ 'checked' if p.uk_wide }}> The big UK cities too</label>
+      </div>
+    </div>
+
+    <div class="stack ruled" style="gap: 10px">
+      <h3 class="t3">Rules</h3>
+      <div class="rowx" style="align-items: flex-end">
+        <div class="field" style="flex: 3 1 260px"><label class="lab" for="av{{ p.person_id }}">Rule a job out if its title has any of these words</label><input id="av{{ p.person_id }}" name="avoid" class="input" maxlength="1000" value="{{ p.avoid or '' }}"></div>
+        <div class="field" style="flex: 0 1 160px"><label class="lab" for="per{{ p.person_id }}">Results per search</label><input id="per{{ p.person_id }}" name="per_search" type="number" min="5" max="1000" class="input" value="{{ p.per_search or 100 }}"></div>
+      </div>
+      <div class="rowx" style="gap: 20px">
+        <label class="check"><input type="checkbox" name="needs_sponsorship" value="1" {{ 'checked' if p.needs_sponsorship }}> Needs visa sponsorship</label>
+        <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if p.enabled }}> Include in refresh</label>
+      </div>
+    </div>
+
+    <div class="formbar"><button class="btn btn--primary">Save {{ p.person.first_name }}'s search</button></div>
+  </form>
+</details>
+{% else %}
+<section class="panel panel--pad"><p class="sub">Create a user account on People first.</p></section>
+{% endfor %}
+{% endblock %}
+{% block scripts %}<script src="/static/admin.js?v=1" defer></script>{% endblock %}

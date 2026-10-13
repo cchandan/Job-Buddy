@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field with context %}
+{% from "_macros.html" import csrf_field, icon with context %}
 {% block title %}Snapshots{% endblock %}
 {% block content %}
 <div class="head">
@@ -9,12 +9,14 @@
   </div>
 </div>
 
-<section class="card stack" aria-label="Take a snapshot">
-  <h2 class="t2">Take a snapshot</h2>
-  <p class="by">The Job Board has {{ jobs_now }} job{{ '' if jobs_now == 1 else 's' }} right now, {{ binned_now }} of them in the bin. You can keep up to {{ room }} snapshots.</p>
+<section class="panel panel--pad panel--accent stack" id="take" aria-label="Take a snapshot">
+  <div class="rowx" style="justify-content: space-between; align-items: baseline">
+    <h2 class="t2">Take a snapshot</h2>
+    <span class="by">The Job Board has {{ jobs_now }} job{{ '' if jobs_now == 1 else 's' }} right now, {{ binned_now }} of them in the bin. You can keep up to {{ room }} snapshots.</span>
+  </div>
   <form method="post" action="/admin/snapshots" class="stack">
     {{ csrf_field() }}
-    <div class="rowx" style="align-items: flex-end; gap: 12px">
+    <div class="rowx" style="align-items: flex-end">
       <div class="field" style="flex: 2 1 220px"><label class="lab" for="sn-name">Name (optional)</label><input id="sn-name" name="name" class="input" maxlength="120" placeholder="Before I change the keywords"></div>
       <div class="field" style="flex: 3 1 260px"><label class="lab" for="sn-note">Note (optional)</label><input id="sn-note" name="note" class="input" maxlength="300"></div>
       <button class="btn btn--primary">Take snapshot</button>
@@ -22,22 +24,27 @@
   </form>
 </section>
 
-<section class="card stack" aria-label="Saved snapshots">
-  <h2 class="t2">Saved snapshots <span class="by">· {{ snaps|length }} of {{ room }}</span></h2>
-  {% if snaps %}
-  <div class="scroll"><table class="tb">
-    <thead><tr><th>Snapshot</th><th>Taken</th><th>Jobs</th><th></th></tr></thead>
-    <tbody>{% for s in snaps %}<tr>
-      <td><strong>{{ s.name }}</strong>{% if s.kind == "auto" %} <span class="tag">automatic</span>{% endif %}{% if s.note %}<div class="by">{{ s.note }}</div>{% endif %}</td>
-      <td>{{ s.created_at|when }}{% if s.created_by %}<div class="by">by {{ s.created_by.first_name }}</div>{% endif %}</td>
-      <td>{{ s.job_count }}<div class="by">{{ (s.size_bytes / 1024)|round|int }} KB</div></td>
-      <td><div class="rowx" style="justify-content: flex-end">
-        <form method="post" action="/admin/snapshots/{{ s.id }}/restore" data-confirm="Restore “{{ s.name }}”? The Job Board goes back to how it was then. Jobs added since move to the bin (nothing is deleted), and an automatic snapshot of the Board as it is now is taken first, so you can undo it.">{{ csrf_field() }}<button class="btn btn--primary">Restore</button></form>
-        <a class="btn" href="/admin/snapshots/{{ s.id }}/download">Download</a>
-        <form method="post" action="/admin/snapshots/{{ s.id }}/delete" data-confirm="Delete the snapshot “{{ s.name }}”? This can't be undone.">{{ csrf_field() }}<button class="btn btn--danger">Delete</button></form>
-      </div></td></tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="sub">No snapshots yet. Take one before you change the keywords or run a big refresh.</p>{% endif %}
-  <p class="by">Restoring puts every job in the snapshot back exactly as it was. Jobs added since go to the <a class="lnk" href="/admin/bin">Bin</a>, and jobs someone is tracking stay on the Board. No Tracker is ever changed. Restore on the machine you scrape from, then Publish to update the live site.</p>
+<section class="panel" aria-label="Saved snapshots">
+  <div class="panel-head">
+    <h2 class="t2">Saved snapshots <span class="by">· {{ snaps|length }} of {{ room }}</span></h2>
+    <span class="meter" role="meter" aria-label="Snapshots used" aria-valuemin="0" aria-valuemax="{{ room }}" aria-valuenow="{{ snaps|length }}"><span style="width: {{ (100 * snaps|length / room)|round|int if room else 0 }}%"></span></span>
+  </div>
+  {% for s in snaps %}
+  <div class="srow">
+    <div class="grow">
+      <div class="sname">{{ s.name }}{% if s.kind == "auto" %} <span class="tag">automatic</span>{% endif %}</div>
+      <div class="by">{{ s.created_at|when }}{% if s.created_by %} by {{ s.created_by.first_name }}{% endif %} · {{ s.job_count }} job{{ '' if s.job_count == 1 else 's' }} · {{ (s.size_bytes / 1024)|round|int }} KB{% if s.note %} · {{ s.note }}{% endif %}</div>
+    </div>
+    <form method="post" action="/admin/snapshots/{{ s.id }}/restore" data-confirm="Restore “{{ s.name }}”? The Job Board goes back to how it was then. Jobs added since move to the bin (nothing is deleted), and an automatic snapshot of the Board as it is now is taken first, so you can undo it.">{{ csrf_field() }}<button class="btn btn--sm">Restore</button></form>
+    <details class="menu">
+      <summary class="iconbtn" aria-label="More for {{ s.name }}">{{ icon("more", 18) }}</summary>
+      <div class="menu-pop" role="menu">
+        <a role="menuitem" href="/admin/snapshots/{{ s.id }}/download">Download</a>
+        <form method="post" action="/admin/snapshots/{{ s.id }}/delete" data-confirm="Delete the snapshot “{{ s.name }}”? This can't be undone.">{{ csrf_field() }}<button role="menuitem" class="danger-text">Delete</button></form>
+      </div>
+    </details>
+  </div>
+  {% else %}<p class="sub" style="padding: 0 20px 20px">No snapshots yet. Take one before you change the keywords or run a big refresh.</p>{% endfor %}
 </section>
+<p class="by narrow">Restoring puts every job in the snapshot back exactly as it was. Jobs added since go to the <a class="lnk" href="/admin/bin">Bin</a>, and jobs someone is tracking stay on the Board. No Tracker is ever changed. Restore on the machine you scrape from, then Publish to update the live site.</p>
 {% endblock %}

@@ -7,7 +7,7 @@ from conftest import make_person, signed_in
 
 def _create(admin, username="newbie"):
     admin.post("/admin/accounts", {"name": "New Bie", "username": username, "role": "user"})
-    return re.search(r'id="pw">([^<]+)<', admin.get("/admin").text).group(1)
+    return re.search(r'id="pw">([^<]+)<', admin.get("/admin/people").text).group(1)
 
 
 def test_needs_admin_password_then_shows_issued_password(people):

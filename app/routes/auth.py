@@ -54,4 +54,4 @@ def change_password(request: Request, database=Depends(auth.get_db), person=Depe
         database.commit()
         auth.start_session(request, person)  # keep this browser signed in; every other one is signed out
         web.flash(request, "Your password has been changed.")
-    return web.redirect("/admin" if person.is_admin else "/profile")
+    return web.redirect("/admin/settings" if person.is_admin else "/profile")

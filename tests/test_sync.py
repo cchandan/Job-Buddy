@@ -344,12 +344,12 @@ def test_the_api_never_overwrites_a_known_deadline_or_touches_the_tracker(browse
 
 def test_sync_page_and_refresh_button(lab, monkeypatch):
     dad = signed_in("dad")
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert "Refresh jobs" in page and "2 sources ready" in page
     monkeypatch.setattr(ingest, "start", lambda person_id: True)
     assert dad.post("/admin/sync/refresh").status_code == 303
     monkeypatch.setattr(sources, "jobspy_available", lambda: False)
-    assert "Refreshing only works when Job Buddy is running on your laptop" in dad.get("/admin/sync").text
+    assert "Refreshing only works when Job Buddy is running on your laptop" in dad.get("/admin/refresh").text
     wife_id = set_profile("wife")
     dad.post(f"/admin/sync/profile/{wife_id}", {"keywords": "tester, developer", "locations": "Leeds", "per_search": "5000", "enabled": "1"})
     with db.SessionLocal() as s:
@@ -361,8 +361,8 @@ def test_the_log_shows_on_the_sync_page(lab):
     lab.jobs["indeed"] = [raw(1)]
     lab.fail = {"linkedin"}
     refresh()
-    page = signed_in("dad").get("/admin/sync").text
-    assert "What happened" in page and "Partial" in page and "linkedin" in page and "rate limited" in page
+    page = signed_in("dad").get("/admin/refresh").text
+    assert "History" in page and "warning" in page and "linkedin" in page and "rate limited" in page
 
 
 def test_the_deadline_cue_needs_a_date_nearby():
@@ -595,7 +595,7 @@ def test_status_endpoint_and_panel_render_while_running(lab, monkeypatch):
     monkeypatch.setitem(ingest.STATE, "started", __import__("time").time() - 60)
     body = dad.get("/admin/sync/status").json()
     assert body["percent"] == 40 and body["eta_seconds"] and body["plan"]["indeed"]["found"] == 37
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert 'id="live"' in page and "Stopping is safe" in page and '"percent": 40' in page.replace('":40', '": 40')
     assert dad.get("/admin/sync/status").status_code == 200 and signed_in("wife").get("/admin/sync/status").status_code == 403
 
@@ -673,7 +673,7 @@ def test_a_job_whose_page_is_still_open_is_not_left_to_drift_to_possibly_closed(
 
 def test_the_admin_page_names_the_tagging_models(lab, monkeypatch):
     monkeypatch.setattr(ai, "tagging_backends", lambda: ["claude", "codex"])
-    page = signed_in("dad").get("/admin/sync").text
+    page = signed_in("dad").get("/admin/refresh").text
     assert "claude (haiku)" in page and "codex (gpt-6-luna)" in page
 
 
@@ -690,7 +690,7 @@ def test_a_completed_refresh_clearly_names_the_exact_model_used(lab, monkeypatch
     monkeypatch.setattr(ingest.tagging, "tag_batch", tagged_with_codex)
     refresh()
 
-    page = signed_in("dad").get("/admin/sync").text
+    page = signed_in("dad").get("/admin/refresh").text
     assert "Model used:" in page
     assert "codex (gpt-6-luna)" in page
 
@@ -768,7 +768,7 @@ def test_the_admin_chooses_and_orders_the_tagging_tools(lab, monkeypatch):
     try:
         dad.post("/admin/sync/tagging", {"pick0": "codex", "pick1": "claude", "pick2": ""})
         assert ai.load_tagging_order() == ("codex", "claude") and ai.tagging_backends() == ["codex", "claude"]  # saved, in that order
-        page = dad.get("/admin/sync").text
+        page = dad.get("/admin/refresh").text
         assert '<option value="codex" selected>' in page and "Third choice" in page
         dad.post("/admin/sync/tagging", {"pick0": "", "pick1": "", "pick2": ""})
         assert ai.load_tagging_order() == () and ai.tagging_backends() == []  # none: keywords only
@@ -783,7 +783,7 @@ def test_routine_plan_lines_are_hidden_but_warnings_still_show(lab):
     lab.jobs["indeed"] = [raw(1)]
     lab.fail = {"linkedin"}
     refresh()
-    page = signed_in("dad").get("/admin/sync").text
+    page = signed_in("dad").get("/admin/refresh").text
     assert "Not using zip_recruiter" not in page and "different searches" not in page  # routine plan lines are gone
     assert "rate limited" in page  # a real problem is still shown
 

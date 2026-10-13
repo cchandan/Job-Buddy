@@ -61,7 +61,7 @@ def _call_model(prompt):
 # Tagging tries these in order and uses the first that works, so no paid API is needed. On the live site
 # only Gemini is used. A backend that hits a limit is skipped for the rest of the run.
 ALL_BACKENDS = ("claude", "codex", "ollama", "gemini")
-_order = list(ALL_BACKENDS)  # the admin can change this on the Jobs sync page
+_order = list(ALL_BACKENDS)  # the admin can change this on the Refresh page
 CLAUDE_MODEL = os.getenv("TAGGING_CLAUDE_MODEL", "haiku")
 CODEX_MODEL = os.getenv("TAGGING_CODEX_MODEL", "gpt-6-luna")  # OpenAI's smallest, cheapest model, made for high-volume extraction
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3")

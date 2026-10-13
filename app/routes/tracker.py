@@ -13,9 +13,9 @@ CLOSED_OUT = ("rejected", "withdrawn")
 
 
 def users_only(person=Depends(auth.current_person)):
-    """The Tracker belongs to users. Admins see a user's Tracker from Admin home."""
+    """The Tracker belongs to users. Admins see a user's Tracker from People."""
     if person.is_admin:
-        raise HTTPException(status_code=403, detail="Admins don't have a Tracker of their own. Open a user's from Admin home.")
+        raise HTTPException(status_code=403, detail="Admins don't have a Tracker of their own. Open a user's from People.")
     return person
 
 

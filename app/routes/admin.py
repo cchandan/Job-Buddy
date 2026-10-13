@@ -1,4 +1,4 @@
-"""Admin: Admin home, accounts, view as user, assign, jobs sync. Every route here needs an admin."""
+"""Admin: Today, People, view as user, assign, Refresh, Searches, Bin, Snapshots, Settings. Every route here needs an admin."""
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import func, or_
@@ -18,8 +18,48 @@ router = APIRouter(prefix="/admin", dependencies=[Depends(auth.require_admin)])
 @router.get("")
 def admin_home(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
     data = summary.admin_home(database, web.today())
-    return web.page(request, "admin_home.html", person, "admin", greeting=greeting(),
-                    new_account=request.session.pop("new_account", None), **data)
+    return web.page(request, "admin_home.html", person, "today", greeting=greeting(), **data)
+
+
+# ---------- People ----------
+
+@router.get("/people")
+def people_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
+                tab: str = "users", manage: int = 0, add: str = ""):
+    return _people(request, database, person, tab=tab, manage=manage, add=bool(add))
+
+
+def _people(request, database, person, tab="users", manage=0, add=False, reveal=None, error="", status_code=200):
+    today = web.today()
+    users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all()
+    admins = database.query(db.Person).filter(db.Person.role == "admin").order_by(db.Person.name).all()
+    rows = []
+    for u in users:
+        views = summary.entries_for(database, u, today)
+        counts = summary.status_counts(views)
+        rows.append({"user": u, "total": len(views), "applied": counts["applied"] + counts["interviewing"] + counts["offer"]})
+    chosen = next((a for a in users + admins if a.id == manage), None)
+    profile = database.get(db.SearchProfile, chosen.id) if chosen is not None and not chosen.is_admin else None
+    response = web.page(request, "admin_people.html", person, "people", users=rows, admins=admins, tab="admins" if tab == "admins" else "users",
+                        signups=database.query(db.SignupRequest).order_by(db.SignupRequest.created_at).all(),
+                        signups_open=auth.signups_open(database), new_account=request.session.pop("new_account", None),
+                        chosen=chosen, profile=profile, add=add, reveal=reveal, error=error, status_code=status_code)
+    response.headers["Cache-Control"] = "no-store"  # a revealed password must not be kept by the browser
+    return response
+
+
+@router.post("/people/{account_id}/reveal")
+def people_reveal(account_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
+                  password: str = Form("")):
+    """Show one person's password, but only after the admin types their own again. Nothing is remembered."""
+    account = _account(database, account_id)
+    problem = auth.confirm_admin(database, person, password[:200])
+    if problem:
+        error = ("Too many wrong attempts. Try again in a few minutes." if problem == "locked"
+                 else "That isn't your password, so nothing is shown.")
+        return _people(request, database, person, manage=account.id, error=error, status_code=401)
+    shown = vault.unseal(account.password_enc)
+    return _people(request, database, person, manage=account.id, reveal={"id": account.id, "password": shown})
 
 
 @router.post("/accounts")
@@ -37,16 +77,16 @@ def create_account(request: Request, database=Depends(auth.get_db), person=Depen
         database.commit()
         # Shown once on the next page, then gone: only the hash is kept.
         request.session["new_account"] = {"name": name, "username": username, "password": password, "what": "created"}
-    return web.redirect("/admin")
+    return web.redirect("/admin/people")
 
 
 @router.post("/signups/toggle")
-def signups_toggle(request: Request, database=Depends(auth.get_db)):
+def signups_toggle(request: Request, database=Depends(auth.get_db), next: str = Form("")):
     turning_off = auth.signups_open(database)
     database.merge(db.AppSetting(key="signups", value="off" if turning_off else "on"))
     database.commit()
     web.flash(request, "Public sign-up is closed. Nobody new can ask for an account." if turning_off else "Public sign-up is open.")
-    return web.redirect("/admin")
+    return web.redirect(web.safe_next(next, "/admin/settings"))
 
 
 def _signup(database, request_id):
@@ -57,29 +97,30 @@ def _signup(database, request_id):
 
 
 @router.post("/signups/{request_id}/approve")
-def signup_approve(request_id: int, request: Request, database=Depends(auth.get_db)):
+def signup_approve(request_id: int, request: Request, database=Depends(auth.get_db), next: str = Form("")):
     req = _signup(database, request_id)
+    back = web.safe_next(next, "/admin/people")
     if database.query(db.Person).filter(db.Person.username == req.username).first() is not None:
         database.delete(req)  # an admin made an account with that username in the meantime
         database.commit()
         web.flash(request, f"The username “{req.username}” was taken in the meantime, so that request was dropped.", "bad")
-        return web.redirect("/admin")
+        return web.redirect(back)
     database.add(db.Person(name=req.name, username=req.username, role="user", password_hash=req.password_hash))
     name, username = req.name, req.username
     database.delete(req)
     database.commit()
     web.flash(request, f"Approved {name}. They can sign in now as “{username}” with the password they chose. Let them know.")
-    return web.redirect("/admin")
+    return web.redirect(back)
 
 
 @router.post("/signups/{request_id}/reject")
-def signup_reject(request_id: int, request: Request, database=Depends(auth.get_db)):
+def signup_reject(request_id: int, request: Request, database=Depends(auth.get_db), next: str = Form("")):
     req = _signup(database, request_id)
     name = req.name
     database.delete(req)
     database.commit()
     web.flash(request, f"Declined {name}'s request.")
-    return web.redirect("/admin")
+    return web.redirect(web.safe_next(next, "/admin/people"))
 
 
 def _account(database, account_id):
@@ -98,7 +139,7 @@ def new_password(account_id: int, request: Request, database=Depends(auth.get_db
     if account.id == person.id:
         auth.start_session(request, account)
     request.session["new_account"] = {"name": account.name, "username": account.username, "password": password, "what": "reset"}
-    return web.redirect("/admin")
+    return web.redirect("/admin/people")
 
 
 @router.get("/passwords")
@@ -122,7 +163,7 @@ def passwords_reveal(request: Request, database=Depends(auth.get_db), person=Dep
 
 
 def _passwords(request, person, rows, error="", status_code=200):
-    response = web.page(request, "admin_passwords.html", person, "admin", rows=rows, error=error, status_code=status_code)
+    response = web.page(request, "admin_passwords.html", person, "people", rows=rows, error=error, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -149,7 +190,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
         database.delete(account)
         database.commit()
         web.flash(request, f"{account.name}'s account and all of their data have been removed.")
-    return web.redirect("/admin")
+    return web.redirect("/admin/people")
 
 
 # ---------- view as user ----------
@@ -157,7 +198,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
 def _user(database, person, user_id):
     user = auth.target_user(database, person, user_id)
     if user.id == person.id:
-        raise HTTPException(status_code=404, detail="Pick a user from Admin home.")
+        raise HTTPException(status_code=404, detail="Pick a user from People.")
     return user
 
 
@@ -186,7 +227,7 @@ def view_tracker(user_id: int, request: Request, database=Depends(auth.get_db), 
                 if len(found) >= 8:
                     break
     base = f"/admin/users/{user.id}/tracker"
-    return web.page(request, "tracker.html", person, "admin", owner=user, viewing=user, readonly=True, tabs=TABS,
+    return web.page(request, "tracker.html", person, "people", owner=user, viewing=user, readonly=True, tabs=TABS,
                     counts=tab_counts(views), views=filter_views(views, status, sort), status=status, sort=sort,
                     total=len(views), base=base, q=q, found=found, section="tracker")
 
@@ -198,14 +239,14 @@ def view_entry(user_id: int, entry_id: int, request: Request, database=Depends(a
     if entry.person_id != user.id:
         raise HTTPException(status_code=404, detail="We couldn't find that job in the Tracker.")
     people = {p.id: p.first_name for p in database.query(db.Person)}
-    return web.page(request, "entry.html", person, "admin", v=summary.entry_view(entry, web.today()), owner=user,
+    return web.page(request, "entry.html", person, "people", v=summary.entry_view(entry, web.today()), owner=user,
                     viewing=user, readonly=True, people=people, section="tracker")
 
 
 @router.get("/users/{user_id}/calendar")
 def view_calendar(user_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin), m: str = ""):
     user = _user(database, person, user_id)
-    return web.page(request, "calendar.html", person, "admin", owner=user, viewing=user, readonly=True,
+    return web.page(request, "calendar.html", person, "people", owner=user, viewing=user, readonly=True,
                     base=f"/admin/users/{user.id}/calendar", entry_base=f"/admin/users/{user.id}/entry", section="calendar",
                     **calendar_routes.build(database, user, web.today(), m))
 
@@ -213,7 +254,7 @@ def view_calendar(user_id: int, request: Request, database=Depends(auth.get_db),
 @router.get("/users/{user_id}/profile")
 def view_profile(user_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
     user = _user(database, person, user_id)
-    return web.page(request, "profile.html", person, "admin", owner=user, viewing=user, readonly=True,
+    return web.page(request, "profile.html", person, "people", owner=user, viewing=user, readonly=True,
                     cv=database.get(db.CV, user.id), base=f"/admin/users/{user.id}/profile", section="profile")
 
 
@@ -277,7 +318,14 @@ def bin_page(request: Request, database=Depends(auth.get_db), person=Depends(aut
         query = query.filter(db.Job.bin_reason.like(jobbin.MANUAL_PREFIX + "%"))
     return web.page(request, "admin_bin.html", person, "bin", cand=jobbin.candidates(database, web.today()), kind=kind,
                     total=query.count(), rows=query.order_by(db.Job.binned_at.desc(), db.Job.title).limit(300).all(),
-                    all_count=jobbin.count(database))
+                    all_count=jobbin.count(database), kind_counts=_bin_counts(database))
+
+
+def _bin_counts(database):
+    binned = database.query(func.count(db.Job.id)).filter(db.Job.binned_at.isnot(None))
+    return {"expired": binned.filter(db.Job.bin_reason.like("Expired:%")).scalar(),
+            "relevance": binned.filter(db.Job.bin_reason.like("No longer relevant%")).scalar(),
+            "manual": binned.filter(db.Job.bin_reason.like(jobbin.MANUAL_PREFIX + "%")).scalar()}
 
 
 @router.post("/bin/add/{job_id}")
@@ -372,11 +420,24 @@ def snapshot_download(snapshot_id: int, database=Depends(auth.get_db)):
 # ---------- the refresher ----------
 
 @router.get("/refresher")
-def refresher_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
-    cards = [{"row": r, "health": refreshers.health(r), "status": r.status or {}}
-             for r in database.query(db.Refresher).order_by(db.Refresher.name).all()]
-    return web.page(request, "admin_refresher.html", person, "refresher", cards=cards, schedule=refreshers.schedule(database),
-                    expected=refreshers.VERSION, runs=runlog.recent(database, 5), new_refresher=request.session.pop("new_refresher", None))
+def refresher_page():
+    return web.redirect("/admin/refresh")
+
+
+@router.get("/refresh")
+def refresh_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    disabled = ingest.disabled_sources(database)
+    can_fetch = bool(sources.plan()[0])
+    picked, skipped = sources.plan(disabled)
+    source_rows = sources.status(disabled)
+    if not can_fetch:  # the fetching happens on a refresher elsewhere, so every site can be switched on or off here
+        source_rows = [{**r, "reason": ""} for r in source_rows]
+    return web.page(request, "admin_refresh.html", person, "refresh", cards=summary.refresher_rows(database),
+                    schedule=refreshers.schedule(database), expected=refreshers.VERSION, new_refresher=request.session.pop("new_refresher", None),
+                    runs=runlog.recent(database, 8), can_fetch=can_fetch, picked=picked, source_rows=source_rows, stages=stage_status(database),
+                    backends=[ai.backend_label(b) for b in (ai.load_tagging_order() and ai.tagging_backends())],
+                    order=ai.tagging_order(), choices=[(b, ai.backend_label(b), ai.backend_ready(b)) for b in ai.ALL_BACKENDS],
+                    state=dict(ingest.STATE), prog=ingest.progress(), notes=runlog.attention(database, web.today()))
 
 
 @router.post("/refresher")
@@ -388,7 +449,7 @@ def refresher_add(request: Request, database=Depends(auth.get_db), name: str = F
         _, token = refreshers.create(database, name)
         # Shown once on the next page, then gone: only a hash of the secret is kept.
         request.session["new_refresher"] = {"name": name, "code": refreshers.connection_code(str(request.base_url), token, name)}
-    return web.redirect("/admin/refresher")
+    return web.redirect("/admin/refresh")
 
 
 @router.post("/refresher/schedule")
@@ -400,7 +461,7 @@ def refresher_schedule(request: Request, database=Depends(auth.get_db), time: st
         refreshers.save_schedule(database, when, bool(enabled))
         web.flash(request, f"Saved. The refresher will run every morning at {when} (UK time)." if enabled
                   else "Saved. The morning refresh is off; you can still use Run now.")
-    return web.redirect("/admin/refresher")
+    return web.redirect("/admin/refresh")
 
 
 def _refresher(database, refresher_id):
@@ -419,7 +480,7 @@ def refresher_run(refresher_id: int, request: Request, database=Depends(auth.get
         row.pending_command = "run_now"
         database.commit()
         web.flash(request, f"Asked {row.name} to refresh now. It picks this up within a minute.")
-    return web.redirect("/admin/refresher")
+    return web.redirect("/admin/refresh")
 
 
 @router.post("/refresher/{refresher_id}/stop")
@@ -428,7 +489,7 @@ def refresher_stop(refresher_id: int, request: Request, database=Depends(auth.ge
     row.pending_command = "stop"
     database.commit()
     web.flash(request, f"Asked {row.name} to stop after its current step. Nothing found so far is lost.")
-    return web.redirect("/admin/refresher")
+    return web.redirect("/admin/refresh")
 
 
 @router.post("/refresher/{refresher_id}/remove")
@@ -438,7 +499,7 @@ def refresher_remove(refresher_id: int, request: Request, database=Depends(auth.
     database.delete(row)
     database.commit()
     web.flash(request, f"Removed {name}. Its secret no longer works, so it can't report or publish any more.")
-    return web.redirect("/admin/refresher")
+    return web.redirect("/admin/refresh")
 
 
 # ---------- jobs sync ----------
@@ -466,17 +527,19 @@ def stage_status(database):
 
 
 @router.get("/sync")
-def sync_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
-    history = database.query(db.SyncRun).order_by(db.SyncRun.at.desc()).limit(10).all()
-    disabled = ingest.disabled_sources(database)
-    picked, skipped = sources.plan(disabled)
-    return web.page(request, "admin_sync.html", person, "sync", profiles=ingest.profiles(database),
-                    can_fetch=bool(sources.plan()[0]), picked=picked, skipped=skipped, source_rows=sources.status(disabled),
-                    stages=stage_status(database),
-                    backends=[ai.backend_label(b) for b in (ai.load_tagging_order() and ai.tagging_backends())],
-                    order=ai.tagging_order(), choices=[(b, ai.backend_label(b), ai.backend_ready(b)) for b in ai.ALL_BACKENDS],
-                    state=dict(ingest.STATE), prog=ingest.progress(), runs=runlog.recent(database, 5), notes=runlog.attention(database, web.today()),
-                    history=history, today_=web.today())
+def sync_page():
+    return web.redirect("/admin/refresh")
+
+
+@router.get("/searches")
+def searches_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin), who: int = 0):
+    profiles = ingest.profiles(database)
+    return web.page(request, "admin_searches.html", person, "searches", profiles=profiles, open_id=who or (profiles[0].person_id if profiles else 0))
+
+
+@router.get("/settings")
+def settings_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    return web.page(request, "admin_settings.html", person, "settings", signups_open=auth.signups_open(database))
 
 
 @router.get("/sync/status")
@@ -500,24 +563,24 @@ def sync_profile(person_id: int, request: Request, database=Depends(auth.get_db)
     web.flash(request, f"Saved {profile.person.first_name}'s search."
               + (f" {stale} job{'' if stale == 1 else 's'} on the Job Board {'was' if stale == 1 else 'were'} found only by keywords that are no longer "
                  "in anyone's search. Open the Bin to move them there." if stale else ""))
-    return web.redirect("/admin/sync")
+    return web.redirect(f"/admin/searches?who={person_id}")
 
 
 @router.post("/sync/tagging")
 def sync_tagging(request: Request, pick0: str = Form(""), pick1: str = Form(""), pick2: str = Form("")):
     ai.save_tagging_order([pick0, pick1, pick2])
     web.flash(request, "Tagging order saved." if ai.tagging_order() else "Saved: jobs will be tagged by keywords only.")
-    return web.redirect("/admin/sync")
+    return web.redirect("/admin/refresh")
 
 
 @router.post("/sync/sources")
 async def sync_sources(request: Request, database=Depends(auth.get_db)):
     """The tick-boxes: which sources the next scrape searches. Unavailable ones keep their setting."""
     form = await request.form()
-    on = ingest.save_sources(database, [str(v) for v in form.getlist("source")])
+    on = ingest.save_sources(database, [str(v) for v in form.getlist("source")], any_source=not sources.plan()[0])
     web.flash(request, ("Sources saved: " + ", ".join(sources.LABELS.get(n, n) for n in on) + ".") if on
               else "Sources saved: none are ticked, so a scrape cannot run until you tick one.")
-    return web.redirect("/admin/sync")
+    return web.redirect("/admin/refresh")
 
 
 def _run(request, database, person, stages):
@@ -530,7 +593,7 @@ def _run(request, database, person, stages):
         web.flash(request, blocked, "bad")
     elif not (ingest.start(person.id) if tuple(stages) == ingest.STAGES else ingest.start(person.id, tuple(stages))):
         web.flash(request, "A refresh is already running.", "bad")
-    return web.redirect("/admin/sync")
+    return web.redirect("/admin/refresh")
 
 
 @router.post("/sync/refresh")
@@ -550,4 +613,4 @@ def sync_run(stage: str, request: Request, database=Depends(auth.get_db), person
 def sync_stop(request: Request):
     ingest.stop()
     web.flash(request, "Stopping after the current step. Nothing is lost; press Refresh to carry on.")
-    return web.redirect("/admin/sync")
+    return web.redirect("/admin/refresh")

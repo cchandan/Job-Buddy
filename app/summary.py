@@ -1,9 +1,11 @@
 """What Home and Admin home show. Pure code over the Tracker, CVs and jobs: these pages store nothing of
 their own, so they can never disagree with the other pages.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
-from . import auth, db, deadlines, ingest, runlog
+from sqlalchemy import func
+
+from . import auth, db, deadlines, ingest, jobbin, refreshers, runlog, snapshots
 
 SOON_DAYS = 7
 ADMIN_URGENT_DAYS = 3
@@ -83,30 +85,84 @@ def _user_line(deadlines_soon, assigned, do_next):
     return (" and ".join(parts) + ".").capitalize() if parts else "Nothing urgent today."
 
 
+def urgent_deadlines(database, today, users=None):
+    """Shortlisted jobs a user has not applied for whose deadline is within a few days."""
+    users = users if users is not None else database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all()
+    urgent = []
+    for user in users:
+        for v in entries_for(database, user, today):
+            if v["entry"].status == "shortlisted" and v["days_left"] is not None and 0 <= v["days_left"] <= ADMIN_URGENT_DAYS:
+                urgent.append({"user": user, **v})
+    return urgent
+
+
+def refresher_rows(database):
+    return [{"row": r, "health": refreshers.health(r), "status": r.status or {}}
+            for r in database.query(db.Refresher).order_by(db.Refresher.name).all()]
+
+
+def needs_you(database, today, urgent=None, rows=None):
+    """Everything an admin has to act on, newest concern first. The sidebar counts these; Today lists them."""
+    items = [{"kind": "signup", "req": r} for r in database.query(db.SignupRequest).order_by(db.SignupRequest.created_at)]
+    urgent = urgent_deadlines(database, today) if urgent is None else urgent
+    items += [{"kind": "deadline", **u} for u in urgent]
+    rows = refresher_rows(database) if rows is None else rows
+    sched_on = refreshers.schedule(database)["enabled"]
+    for r in rows:
+        last = r["status"].get("last_run") or {}
+        if last.get("status") == "failed":
+            items.append({"kind": "refresh", "title": f"{r['row'].name}: the last refresh failed", "text": last.get("message") or "Open the log to see why."})
+        elif sched_on and refreshers.is_stale(r["row"]) and r["row"].last_seen is not None:
+            items.append({"kind": "refresh", "title": f"{r['row'].name} has gone quiet", "text": "It hasn't checked in for over a day. Is the computer on?"})
+    items += [{"kind": "refresh", "title": note, "text": ""} for note in runlog.attention(database, today)]
+    return items
+
+
+def nav(database, today):
+    """What the admin sidebar shows beside its links: counts, and whether the refresher looks healthy."""
+    rows = refresher_rows(database)
+    cand = jobbin.candidates(database, today)
+    if not rows:
+        dot = None
+    elif any((r["status"].get("last_run") or {}).get("status") == "failed" or r["health"][0] in ("offline",) for r in rows):
+        dot = "bad"
+    elif all(r["health"][0] == "online" for r in rows):
+        dot = "ok"
+    else:
+        dot = "warn"
+    sched = refreshers.schedule(database)
+    return {"needs": len(needs_you(database, today, rows=rows)), "signups": database.query(func.count(db.SignupRequest.id)).scalar(),
+            "tidy": len(cand["expired"]) + len(cand["irrelevant"]), "refresh_dot": dot, "refresh_time": sched["time"] if sched["enabled"] and rows else ""}
+
+
 def admin_home(database, today):
+    """Everything the Today page shows."""
     users = database.query(db.Person).filter(db.Person.role == "user").order_by(db.Person.name).all()
-    admins = database.query(db.Person).filter(db.Person.role == "admin").order_by(db.Person.name).all()
-    cards, urgent = [], []
+    cards = []
     for user in users:
         views = entries_for(database, user, today)
         upcoming = [v for v in views if v["deadline"] and v["deadline"] >= today
                     and v["entry"].status not in ("rejected", "withdrawn")]
-        for v in views:
-            if v["entry"].status == "shortlisted" and v["days_left"] is not None and 0 <= v["days_left"] <= ADMIN_URGENT_DAYS:
-                urgent.append({"user": user, **v})
         cards.append({"user": user, "counts": status_counts(views), "total": len(views), "next": upcoming[:3]})
+    urgent = urgent_deadlines(database, today, users)
+    rows = refresher_rows(database)
+    start = datetime.combine(today, time.min)
+    live = db.Job.binned_at.is_(None)
+    cand = jobbin.candidates(database, today)
+    snaps = snapshots.listing(database)
     age = ingest.board_age_days(database, today)
-    parts = []
+    last = ingest.last_sync(database)
     if age is None:
-        parts.append("the Job Board has not been synced yet")
+        line = "The Job Board has not been refreshed yet."
     else:
-        parts.append("the Job Board was updated today" if age == 0 else f"the Job Board is {_plural(age, 'day')} old")
-    line = " and ".join(parts)
+        line = "The Job Board was refreshed today." if age == 0 else f"The Job Board was last refreshed {_plural(age, 'day')} ago."
     return {
-        "cards": cards, "admins": admins, "urgent": urgent, "signups": database.query(db.SignupRequest).order_by(db.SignupRequest.created_at).all(),
-        "signups_open": auth.signups_open(database), "board_age": age, "last_sync": ingest.last_sync(database),
-        "stale": age is None or age > 3, "notes": runlog.attention(database, today), "job_count": database.query(db.Job).count(),
-        "line": line[:1].upper() + line[1:] + ".", "activity": activity(database),
+        "cards": cards, "needs": needs_you(database, today, urgent, rows), "refreshers": rows, "last_sync": last, "line": line,
+        "job_count": database.query(func.count(db.Job.id)).filter(live).scalar(),
+        "new_today": database.query(func.count(db.Job.id)).filter(live, db.Job.first_seen >= start).scalar(),
+        "closed_today": database.query(func.count(db.Job.id)).filter(db.Job.closed_at >= start).scalar(),
+        "tidy": {"expired": len(cand["expired"]), "irrelevant": len(cand["irrelevant"])},
+        "last_snapshot": snaps[0] if snaps else None, "activity": activity(database),
     }
 
 
@@ -115,13 +171,13 @@ def activity(database, limit=8):
     events = []
     for run in database.query(db.SyncRun).order_by(db.SyncRun.at.desc()).limit(limit):
         who = run.person.first_name if run.person else "Someone"
-        events.append((run.at, who, f"Synced jobs: {run.new} new, {run.updated} updated"))
+        events.append((run.at, who, f"refreshed the Job Board: {run.new} new, {run.updated} updated"))
     for entry in database.query(db.TrackerEntry).order_by(db.TrackerEntry.created_at.desc()).limit(limit * 3):
         title = db.entry_job(entry).title
         owner = entry.person.first_name if entry.person else "someone"
         if entry.source == "assigned" and entry.added_by:
-            events.append((entry.created_at, entry.added_by.first_name, f"Assigned {title} to {owner}"))
+            events.append((entry.created_at, entry.added_by.first_name, f"assigned {title} to {owner}"))
         for change in (entry.status_history or [])[1:]:
-            events.append((datetime.fromisoformat(change["at"]), owner, f"Marked {change['status'].capitalize()} · {title}"))
+            events.append((datetime.fromisoformat(change["at"]), owner, f"moved {title} to {change['status'].capitalize()}"))
     events.sort(key=lambda e: e[0], reverse=True)
     return [{"at": at, "who": who, "what": what} for at, who, what in events[:limit]]

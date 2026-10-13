@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 
 from sqlalchemy import func
 
-from . import auth, db, deadlines, ingest, jobbin, refreshers, runlog, snapshots
+from . import auth, db, deadlines, ingest, jobbin, refreshers, runlog, snapshots, triage
 
 SOON_DAYS = 7
 ADMIN_URGENT_DAYS = 3
@@ -78,7 +78,8 @@ def user_nav(database, person, today):
     assigned = database.query(func.count(db.TrackerEntry.id)).filter(
         db.TrackerEntry.person_id == person.id, db.TrackerEntry.source == "assigned", db.TrackerEntry.seen_at.is_(None),
         db.TrackerEntry.status == "shortlisted").scalar()
-    return {"todo": len(data["do_next"]), "new_jobs": data["new_jobs"], "assigned": assigned}
+    return {"todo": len(data["do_next"]), "new_jobs": data["new_jobs"], "assigned": assigned,
+            "triage": len(triage.deck(database, person, today))}
 
 
 def _plural(n, word):

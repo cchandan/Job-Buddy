@@ -184,6 +184,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
         if cv is not None:
             database.delete(cv)
         database.query(db.PushSubscription).filter(db.PushSubscription.person_id == account.id).delete()
+        database.query(db.JobDecision).filter(db.JobDecision.person_id == account.id).delete()
         database.flush()
         for model, column in ((db.TrackerEntry, "added_by_id"), (db.SyncRun, "person_id")):
             database.query(model).filter(getattr(model, column) == account.id).update({column: None})

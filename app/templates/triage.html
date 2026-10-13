@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip, csrf_field, icon with context %}
+{% block title %}Triage{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Triage</h1>
+    <p class="sub">Your best matches first, one at a time. {% if card %}{{ remaining }} to look at.{% else %}Done for now.{% endif %}</p>
+  </div>
+  <a class="btn" href="/triage/skipped">Skipped jobs{% if skipped_count %} <span class="by">{{ skipped_count }}</span>{% endif %}</a>
+</div>
+
+<div class="split split--triage">
+  <div class="stack-lg triage-main">
+    {% if card %}
+    <article class="tcard" id="tcard" aria-label="{{ card.title }}">
+      <span class="tstamp tstamp--skip" aria-hidden="true">SKIP</span><span class="tstamp tstamp--yes" aria-hidden="true">SHORTLIST</span>
+      <div class="rowx" style="gap: 14px; flex-wrap: nowrap">
+        <span class="logo">{{ (card.company or card.title)[:1]|upper }}</span>
+        <div><div class="meta">{{ card.company }}{% if card.location %} · {{ card.location }}{% endif %}</div><div class="by">Added to the Board {{ card.first_seen|when }}</div></div>
+      </div>
+      <h2 class="ttitle">{{ card.title }}</h2>
+      <div class="rowx" style="gap: 6px">
+        {{ chip(deadline_chip) }}
+        {% if card.sponsorship == "sponsors" %}<span class="badge b-ok">Sponsors visas</span>{% elif card.licensed_sponsor %}<span class="badge b-ok">Licensed sponsor</span>{% endif %}
+        {% if card.work_mode in MODE_LABELS %}<span class="tag">{{ MODE_LABELS[card.work_mode] }}</span>{% endif %}
+        <span class="tag">{{ salary(card) or "Salary not stated" }}</span>
+      </div>
+      <div class="whybox"><div class="whylab">Why this one</div><div>{{ why }}</div></div>
+      {% if card.sponsorship_quote and card.sponsorship != "unclear" %}<div class="quote">“{{ card.sponsorship_quote|truncate(160) }}”</div>{% endif %}
+      <a class="lnk minh" href="/board/{{ card.id }}">Read the full advert</a>
+    </article>
+
+    <div class="tbar">
+      <form method="post" action="/triage/{{ card.id }}/skip" id="skipform">{{ csrf_field() }}
+        <button class="tbtn tbtn--skip" id="skipbtn" aria-label="Skip this job">{{ icon("x", 28) }}<span>Skip</span></button>
+      </form>
+      <form method="post" action="/triage/undo">{{ csrf_field() }}<button class="tbtn tbtn--undo" aria-label="Undo the last swipe" {{ 'disabled' if not last }}>{{ icon("undo", 20) }}<span>Undo</span></button></form>
+      <form method="post" action="/triage/{{ card.id }}/shortlist" id="yesform">{{ csrf_field() }}
+        <button class="tbtn tbtn--yes" id="yesbtn" aria-label="Shortlist this job">{{ icon("check", 28) }}<span>Shortlist</span></button>
+      </form>
+    </div>
+    <p class="by tkeys"><span class="kb">Keyboard: ← skips, → shortlists, Z undoes. </span>On a phone, swipe the card.</p>
+
+    <dialog id="reasons" class="sheet" aria-label="Why skip it?">
+      <form method="post" action="/triage/{{ card.id }}/skip" class="stack">
+        {{ csrf_field() }}
+        <div><h2 class="t2">Why skip it?</h2><p class="by">Optional. It helps the next batch fit better.</p></div>
+        <div class="rowx" style="gap: 8px">
+          {% for key, label in reasons %}<button class="pill" name="reason" value="{{ key }}">{{ label }}</button>{% endfor %}
+        </div>
+        <div class="rowx"><button class="btn" style="flex: 1">Skip without a reason</button><button type="button" class="btn btn--quiet" id="reasons-cancel">Cancel</button></div>
+      </form>
+    </dialog>
+    {% else %}
+    <section class="panel panel--pad empty-panel">
+      <span class="ico ico--green ico--lg">{{ icon("check", 26) }}</span>
+      <h2 class="t2">You're all caught up</h2>
+      <p class="sub">New matches arrive after the next refresh. {% if counts.shortlist or counts.skip %}Today: {{ counts.shortlist }} shortlisted, {{ counts.skip }} skipped.{% endif %}</p>
+      <div class="rowx" style="justify-content: center"><a class="btn btn--primary" href="/tracker">Open your Tracker</a><a class="btn" href="/board">Browse the Job Board</a></div>
+    </section>
+    {% endif %}
+
+    {% if last %}
+    <div class="toast" role="status">
+      <span>{% if last.kind == "shortlist" %}{{ "Added to your Tracker: " if last.made else "Already in your Tracker: " }}{{ last.title }}{% else %}Skipped: {{ last.title }}.{% if last.taught %} It taught: {{ last.taught }}.{% endif %}{% endif %}</span>
+      <form method="post" action="/triage/undo">{{ csrf_field() }}<button>Undo</button></form>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="stack-lg">
+    <section class="panel panel--pad stack" aria-label="Today">
+      <h2 class="t2">Today</h2>
+      <div class="rowx" style="gap: 10px"><div class="mini"><div class="num">{{ counts.shortlist }}</div><div class="by">Shortlisted</div></div><div class="mini"><div class="num">{{ counts.skip }}</div><div class="by">Skipped</div></div></div>
+    </section>
+    {% if upnext %}
+    <section class="panel" aria-label="Up next">
+      <h2 class="t2 panel-head" style="display: block">Up next</h2>
+      {% for j in upnext %}<div class="prow"><div class="grow"><div class="jt">{{ j.title }}</div><div class="meta">{{ j.company }}{% if j.location %} · {{ j.location }}{% endif %}</div></div></div>{% endfor %}
+    </section>
+    {% endif %}
+    <section class="panel panel--pad stack panel--tint" aria-label="What it has learned">
+      <strong>What it has learned from you</strong>
+      {% if rules %}
+      <div class="rowx" style="gap: 6px">{% for rule, label in rules %}<span class="fchip">{{ label }}<form method="post" action="/triage/rules/forget" class="inline">{{ csrf_field() }}<input type="hidden" name="rule" value="{{ rule }}"><input type="hidden" name="next" value="/triage"><button aria-label="Forget: {{ label }}">{{ icon("close", 12) }}</button></form></span>{% endfor %}</div>
+      {% else %}<p class="by">Nothing yet. Skip a job and say why, and similar jobs will rank lower.</p>{% endif %}
+      <a class="lnk minh" href="/triage/skipped">Review or undo</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/triage.js?v=1" defer></script>{% endblock %}

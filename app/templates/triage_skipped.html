@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% block title %}Skipped jobs{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Skipped jobs</h1>
+    <p class="sub">Skipped jobs rank lower but are never deleted. Bring one back if you change your mind.</p>
+  </div>
+  <a class="btn" href="/triage">Back to Triage</a>
+</div>
+
+<div class="narrow stack-lg">
+  <section class="panel panel--pad stack panel--tint" aria-label="What you've told it">
+    <strong>What you've told it so far</strong>
+    {% if rules %}
+    <div class="rowx" style="gap: 6px">{% for rule, label in rules %}<span class="fchip">{{ label }}<form method="post" action="/triage/rules/forget" class="inline">{{ csrf_field() }}<input type="hidden" name="rule" value="{{ rule }}"><button aria-label="Forget: {{ label }}">{{ icon("close", 12) }}</button></form></span>{% endfor %}</div>
+    {% else %}<p class="by">Nothing yet. When you skip a job and give a reason, the rule shows up here, and you can forget it.</p>{% endif %}
+  </section>
+
+  <section class="panel" aria-label="Skipped jobs">
+    {% for row, job in rows %}
+    <div class="jrow">
+      <div class="jrow-main"><h2 class="jt"><a class="plain" href="/board/{{ job.id }}">{{ job.title }}</a></h2><div class="meta">{{ job.company }}{% if job.location %} · {{ job.location }}{% endif %}</div>
+        <div class="rowx" style="gap: 6px">{% if row.reason %}<span class="badge b-rejected badge--sm">{{ labels[row.reason] }}</span>{% else %}<span class="badge b-none badge--sm">No reason given</span>{% endif %}<span class="by">{{ row.created_at|when }}</span></div></div>
+      <form method="post" action="/triage/skipped/{{ job.id }}/restore">{{ csrf_field() }}<button class="btn">Bring back</button></form>
+    </div>
+    {% else %}<div class="empty-panel panel--pad"><p class="sub">Nothing skipped.</p></div>{% endfor %}
+  </section>
+</div>
+{% endblock %}

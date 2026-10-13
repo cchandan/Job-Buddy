@@ -246,6 +246,19 @@ class PushSubscription(Base):
     created_at = Column(DateTime, default=utcnow)
 
 
+class JobDecision(Base):
+    """One person's swipe on one Board job in Triage: shortlisted it, or skipped it (with an optional reason and the rule it taught)."""
+    __tablename__ = "job_decisions"
+    __table_args__ = (UniqueConstraint("person_id", "job_id", name="uq_decision_person_job"),)
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(String(32), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    decision = Column(String(10), nullable=False)  # "shortlist" or "skip"
+    reason = Column(String(12), default="")        # senior, location, field, company, pay, other, or empty
+    rule = Column(String(200), default="")         # what the skip taught, like "place:london"; empty if nothing
+    created_at = Column(DateTime, default=utcnow)
+
+
 class FetchState(Base):
     """When each (source, search) last succeeded, so the next fetch asks only for what is newer."""
     __tablename__ = "fetch_state"

@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from fastapi import Depends, HTTPException, Request
 
-from . import db, notify
+from . import db, notify, vault
 
 MAX_FAILURES = 5
 VISIT_MINUTES = 30  # a request after this long away counts as a new visit, and tells the admins
@@ -87,11 +87,31 @@ def sign_in(database, username, password):
     return person, None
 
 
-def set_password(person, password):
-    """Replace the password and sign the person out everywhere."""
+def set_password(person, password, issued=False):
+    """Replace the password and sign the person out everywhere.
+
+    `issued` is true for a password an admin generated: an encrypted copy is kept so an admin can look it up
+    again. A password the person chose themselves is never kept.
+    """
     person.password_hash = hash_password(password)
+    person.password_enc = vault.seal(password) if issued else None
     person.session_version = (person.session_version or 1) + 1
     person.failed_count, person.locked_until = 0, None
+
+
+def confirm_admin(database, admin, password):
+    """Check an admin's own password again before a sensitive page. Wrong guesses count towards the sign-in lockout.
+    Returns None when it is right, else "wrong" or "locked"."""
+    now = db.utcnow()
+    if admin.locked_until and admin.locked_until > now:
+        return "locked"
+    if check_password(password, admin.password_hash):
+        return None
+    admin.failed_count = (admin.failed_count or 0) + 1
+    if admin.failed_count >= MAX_FAILURES:
+        admin.locked_until, admin.failed_count = now + timedelta(minutes=LOCK_MINUTES), 0
+    database.commit()
+    return "locked" if admin.locked_until and admin.locked_until > now else "wrong"
 
 
 def start_session(request, person):

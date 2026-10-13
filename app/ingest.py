@@ -1,4 +1,5 @@
-"""One-click refresh: fetch from every source -> tag only what is new or changed -> publish -> check a few old jobs.
+"""One-click refresh: fetch from every ticked source -> tag only what is new or changed -> check a few old jobs -> publish.
+Each of those stages (scrape, liveness, publish) can also be run on its own from Admin > Jobs sync.
 
 Runs on an admin's laptop, never the server. Every step is saved as it goes, so a stop, a rate limit or a closed laptop
 loses nothing: press Refresh again and it carries on, and jobs it already knows are not tagged again.
@@ -26,7 +27,11 @@ PACE_SECONDS = {"linkedin": 3.0, "glassdoor": 2.0}
 DEEPEST = {"linkedin": 100, "glassdoor": 100}  # these load every advert page, so asking for more gets very slow; Indeed is quick
 BREAKER = 2  # a source that fails this many searches in a row is skipped for the rest of the run
 
-STATE = {"running": False, "stop": False, "phase": "", "fetched": 0, "tagged": 0, "total": 0, "message": "", "run_id": None,
+STAGES = ("scrape", "liveness", "publish")  # a run can do any of these on their own, always in this order
+STAGE_PHASE = {"scrape": "Planning", "liveness": "Checking old jobs", "publish": "Publishing"}
+SOURCES_KEY = "sources_off"  # AppSetting: the sources the admin has unticked, comma separated
+
+STATE = {"stages": list(STAGES), "running": False, "stop": False, "phase": "", "fetched": 0, "tagged": 0, "total": 0, "message": "", "run_id": None,
          "plan": {}, "now": "", "started": 0.0, "new": 0, "seen": 0, "notes": [], "stop_publish": False}
 _lock = threading.Lock()
 
@@ -37,7 +42,7 @@ def progress(state=STATE):
     total, done = sum(p["total"] for p in plan.values()), sum(p["done"] for p in plan.values())
     elapsed = time.time() - state["started"] if state["started"] else 0
     eta = elapsed / done * (total - done) if done >= 3 and total > done else None  # a rough guess: searches are uneven
-    return {"running": state["running"], "phase": state["phase"], "message": state["message"], "now": state["now"],
+    return {"stages": list(state.get("stages") or STAGES), "running": state["running"], "phase": state["phase"], "message": state["message"], "now": state["now"],
             "percent": round(100 * done / total) if total else 0, "eta_seconds": eta, "elapsed": elapsed,
             "plan": plan, "found": state["fetched"], "new": state["new"], "seen": state["seen"], "notes": state["notes"][-3:],
             "stopping": state["stop"]}
@@ -49,6 +54,29 @@ def jobspy_available():
 
 def split_list(text):
     return [part.strip() for part in (text or "").replace("\n", ",").split(",") if part.strip()]
+
+
+def disabled_sources(database):
+    """The sources the admin has unticked."""
+    row = database.get(db.AppSetting, SOURCES_KEY)
+    return set(split_list(row.value)) if row is not None and row.value else set()
+
+
+def save_sources(database, ticked):
+    """Remember which sources are ticked. A source that cannot run here (no tools or key) keeps whatever it was set to.
+    Returns the sources that are now switched on and able to run."""
+    ticked, off = set(ticked), disabled_sources(database)
+    for name in sources.names():
+        if sources.unavailable_reason(name):
+            continue
+        (off.discard if name in ticked else off.add)(name)
+    database.merge(db.AppSetting(key=SOURCES_KEY, value=",".join(sorted(off))))
+    database.commit()
+    return [n for n in sources.names() if n not in off and not sources.unavailable_reason(n)]
+
+
+class Cannot(Exception):
+    """A run that cannot start. The message says why, in plain words."""
 
 
 UK_CITIES = ["London", "Manchester", "Leeds", "Bristol", "Edinburgh", "Glasgow", "Reading", "Cambridge", "Leamington Spa",
@@ -310,24 +338,33 @@ def _plain(e):
     return name
 
 
-def refresh(person_id=None, state=STATE, check_pages=True):
-    """The whole job. Returns the run's status: complete / partial / failed. Whatever was fetched is already saved, so even a
-    crash or a Stop still publishes what there is and writes the log."""
-    state.update(stop_publish=False, phase="Planning", message="", fetched=0, tagged=0, total=0, plan={}, now="", started=time.time(), new=0, seen=0, notes=[])
+def refresh(person_id=None, state=STATE, check_pages=True, stages=None):
+    """The whole job, or just some stages of it (scrape, liveness, publish: always in that order). Returns the run's status:
+    complete / partial / failed. Whatever was fetched is already saved, so even a crash or a Stop still publishes what there
+    is (when publishing is one of the stages) and writes the log."""
+    if stages is None:
+        stages = STAGES if check_pages else ("scrape", "publish")
+    stages = tuple(st for st in STAGES if st in stages)
+    state.update(stages=list(stages), stop_publish=False, phase=STAGE_PHASE[stages[0]] if stages else "Planning", message="",
+                 fetched=0, tagged=0, total=0, plan={}, now="", started=time.time(), new=0, seen=0, notes=[])
     run = runlog.Run(hook=lambda level, message: state["notes"].append(message))
     state["run_id"] = run.id
     ai.reset_backends()
     ai.load_tagging_order()
-    summary, crashed = {}, False
+    summary, crashed, cannot = {}, False, ""
     try:
-        summary = _refresh(run, person_id, state, check_pages) or {}
+        summary = _refresh(run, person_id, state, stages) or {}
+    except Cannot as e:
+        cannot = str(e)
+        run.event("plan", cannot, level="error")
+        state.update(phase="Stopped", message=cannot)
     except Exception as e:
         crashed = True
         log.exception("refresh crashed")
         run.event("plan", f"The refresh stopped unexpectedly ({type(e).__name__}). Jobs found before that are saved; press Refresh to carry on.",
                   level="error")
     pushed = None
-    if push.configured():
+    if "publish" in stages and not cannot and push.configured():
         state["phase"] = "Publishing"
         try:
             with db.SessionLocal() as s:
@@ -335,21 +372,33 @@ def refresh(person_id=None, state=STATE, check_pages=True):
         except Exception as e:
             run.event("push", f"Publishing to the online site failed ({_plain(e)}). Your jobs are safe here; press Refresh to try again.",
                       level="error")
-    with db.SessionLocal() as s:
-        s.add(db.SyncRun(person_id=person_id, new=summary.get("new", 0), updated=summary.get("updated", 0),
-                         unchanged=summary.get("seen", 0), failed=0, seen=summary.get("seen", 0), closed=summary.get("closed", 0)))
-        s.commit()
+    if "scrape" in stages and summary:
+        summary.setdefault("closed", 0)
+        summary.setdefault("checked", 0)
+        with db.SessionLocal() as s:  # only a scrape counts as "the Job Board was synced"
+            s.add(db.SyncRun(person_id=person_id, new=summary.get("new", 0), updated=summary.get("updated", 0),
+                             unchanged=summary.get("seen", 0), failed=0, seen=summary.get("seen", 0), closed=summary.get("closed", 0)))
+            s.commit()
     stopped = state["stop"]
-    failed = crashed or not summary
+    failed = crashed or bool(cannot) or not summary
     status = run.finish("failed" if failed else "partial" if stopped else None, pushed=pushed, **summary)
-    if push.configured():
+    if push.configured() and "publish" in stages and not cannot:
         try:
             push.send_log(run.id)
         except Exception:
             pass  # the log stays on this laptop; the next refresh sends the jobs again anyway
-    state.update(phase="Stopped" if stopped or failed else "Done", running=False, now="",
-                 message=(f"{summary.get('new', 0)} new, {summary.get('updated', 0)} updated, {summary.get('seen', 0)} unchanged, "
-                          f"{summary.get('closed', 0)} closed.") if summary else "Something went wrong. Press Refresh to carry on.")
+    if cannot:
+        message = cannot
+    elif not summary:
+        message = "Something went wrong. Press Refresh to carry on."
+    elif "scrape" in stages:
+        message = (f"{summary.get('new', 0)} new, {summary.get('updated', 0)} updated, {summary.get('seen', 0)} unchanged, "
+                   f"{summary.get('closed', 0)} closed.")
+    elif "liveness" in stages:
+        message = f"Checked {summary.get('checked', 0)} old jobs: {summary.get('closed', 0)} closed."
+    else:
+        message = f"Published {(pushed or {}).get('sent', 0)} new or changed jobs." if pushed else "Nothing was published."
+    state.update(phase="Stopped" if stopped or failed else "Done", running=False, now="", message=message)
     return status
 
 
@@ -410,7 +459,8 @@ def _save(run, raws, backends, state, totals):
     return f"{new} new, {updated} updated, {len(seen)} already known"
 
 
-def _refresh(run, person_id, state, check_pages):
+def _scrape(run, state):
+    """Stage 1: search every ticked source, tag what is new or changed, save it. Returns the summary to log."""
     with db.SessionLocal() as s:
         rows = profiles(s)
         plan = _plan(rows)
@@ -418,11 +468,11 @@ def _refresh(run, person_id, state, check_pages):
         per_search = max([p.per_search or 100 for p in rows] or [100])
         names = {p.person_id: p.person.first_name for p in rows if p.enabled and split_list(p.keywords)}
     if not plan:
-        run.event("plan", "Nobody has job titles or keywords set. Add some in Admin > Jobs sync first.", level="error")
-        state.update(phase="Stopped", message="Add some job titles or keywords first.")
-        return run.finish("failed")
+        raise Cannot("Nobody has job titles or keywords set. Add some in Admin > Jobs sync first.")
 
-    picked, skipped = sources.plan()
+    with db.SessionLocal() as s:
+        disabled = disabled_sources(s)
+    picked, skipped = sources.plan(disabled)
     run.event("plan", f"Using {len(picked)} sources: {', '.join(picked) or 'none'}.")
     for name, why in skipped:
         run.event("plan", f"Not using {name}: {why}.", source=name)
@@ -434,9 +484,7 @@ def _refresh(run, person_id, state, check_pages):
     backends = ai.tagging_backends()
     run.event("plan", "Tagging with: " + (", ".join(ai.backend_label(b) for b in backends) if backends else "keywords only (no AI tool found)") + ".")
     if not picked:
-        run.event("plan", "No source is available. Install the fetching tools (see the README) and try again.", level="error")
-        state.update(phase="Stopped", message="No job source is available.")
-        return run.finish("failed")
+        raise Cannot("Every source is turned off or unavailable. Tick at least one under Sources, or install the fetching tools (see the README).")
 
     with db.SessionLocal() as s:
         _backfill_keys(s)
@@ -454,28 +502,42 @@ def _refresh(run, person_id, state, check_pages):
     if tag["keyword_only"]:
         run.event("tag", f"{tag['keyword_only']} jobs were tagged by keywords only and will be upgraded when AI is available.", level="warn")
 
-    closed = checked = 0
-    if check_pages and not state["stop"]:
-        state["phase"] = "Checking old jobs"
-        with db.SessionLocal() as s:
-            result = liveness.check(s, run, stop=lambda: state["stop"])
-        closed, checked = result["closed"], result["checked"]
-        run.event("liveness", f"Checked {checked} old jobs: {result['closed']} closed, {result['open']} still open, "
-                  f"{result['unknown']} could not be told (left unchanged).")
-
-    summary.update(new=totals["new"], updated=totals["updated"], seen=totals["seen"], closed=closed, checked=checked,
+    summary.update(new=totals["new"], updated=totals["updated"], seen=totals["seen"],
                    ai_calls=tag["ai_calls"], ai_avoided=tag["avoided"], keyword_only=tag["keyword_only"],
                    backends=model_labels)
     return summary
 
 
-def start(person_id=None):
-    """Start a refresh in the background. Returns False if one is already running."""
+def _liveness(run, state):
+    """Stage 2: a few polite page checks on old jobs. Needs no fetching tools, only the web."""
+    state["phase"] = "Checking old jobs"
+    with db.SessionLocal() as s:
+        result = liveness.check(s, run, stop=lambda: state["stop"])
+    run.event("liveness", f"Checked {result['checked']} old jobs: {result['closed']} closed, {result['open']} still open, "
+              f"{result['unknown']} could not be told (left unchanged).")
+    return {"closed": result["closed"], "checked": result["checked"]}
+
+
+def _refresh(run, person_id, state, stages):
+    """Run the chosen stages in order. Publishing is done by refresh() afterwards, so it happens even after a crash or a Stop."""
+    summary = {"stages": list(stages)}
+    if "scrape" in stages:
+        summary.update(_scrape(run, state))
+    if "liveness" in stages and not state["stop"]:
+        summary.update(_liveness(run, state))
+    return summary
+
+
+
+
+def start(person_id=None, stages=STAGES):
+    """Start a refresh (all stages, or just the ones given) in the background. Returns False if one is already running."""
     with _lock:
         if STATE["running"]:
             return False
-        STATE.update(running=True, stop=False, phase="Starting", fetched=0, tagged=0, total=0, message="", plan={}, now="", started=time.time(), notes=[])
-    threading.Thread(target=refresh, args=(person_id, STATE), daemon=True).start()
+        STATE.update(running=True, stop=False, stages=list(stages), phase="Starting", fetched=0, tagged=0, total=0, message="", plan={}, now="",
+                     started=time.time(), notes=[])
+    threading.Thread(target=refresh, args=(person_id, STATE, True, stages), daemon=True).start()
     return True
 
 

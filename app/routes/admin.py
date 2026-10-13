@@ -1,9 +1,10 @@
 """Admin: Admin home, accounts, view as user, assign, jobs sync. Every route here needs an admin."""
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, jobbin, notify, push, runlog, sources, summary, tracking, vault, web
+from .. import ai, auth, db, deadlines, ingest, jobbin, notify, push, runlog, snapshots, sources, summary, tracking, vault, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -295,6 +296,62 @@ async def bin_restore(request: Request, database=Depends(auth.get_db)):
     web.flash(request, f"Restored {n} job{'' if n == 1 else 's'} to the Job Board. They won't be binned automatically again." if n
               else "Tick the jobs you want to restore first.", "ok" if n else "bad")
     return web.redirect("/admin/bin")
+
+
+# ---------- snapshots ----------
+
+@router.get("/snapshots")
+def snapshots_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    return web.page(request, "admin_snapshots.html", person, "snapshots", snaps=snapshots.listing(database), room=snapshots.MAX_SNAPSHOTS,
+                    jobs_now=database.query(func.count(db.Job.id)).scalar(), binned_now=jobbin.count(database))
+
+
+def _snapshot_action(request, fn, *args, done=""):
+    if ingest.STATE["running"]:
+        web.flash(request, "A refresh is running. Wait for it to finish, then try again.", "bad")
+        return web.redirect("/admin/snapshots")
+    try:
+        message = fn(*args)
+    except snapshots.SnapshotError as e:
+        web.flash(request, str(e), "bad")
+    else:
+        web.flash(request, message or done)
+    return web.redirect("/admin/snapshots")
+
+
+@router.post("/snapshots")
+def snapshot_take(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
+                  name: str = Form(""), note: str = Form("")):
+    def go():
+        snap = snapshots.take(database, name, note, person)
+        return f"Snapshot saved: “{snap.name}”, {snap.job_count} jobs."
+    return _snapshot_action(request, go)
+
+
+@router.post("/snapshots/{snapshot_id}/restore")
+def snapshot_restore(snapshot_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    def go():
+        r = snapshots.restore(database, snapshot_id, person)
+        return (f"Restored. {r['updated']} jobs put back as they were"
+                + (f", {r['brought_back']} brought back" if r["brought_back"] else "")
+                + (f", {r['binned']} newer jobs moved to the bin" if r["binned"] else "")
+                + (f", {r['kept']} newer jobs someone is tracking left on the Board" if r["kept"] else "")
+                + f". To undo this, restore “{r['safety']}”. Publish to send it to the live site.")
+    return _snapshot_action(request, go)
+
+
+@router.post("/snapshots/{snapshot_id}/delete")
+def snapshot_delete(snapshot_id: int, request: Request, database=Depends(auth.get_db)):
+    return _snapshot_action(request, lambda: snapshots.delete(database, snapshot_id), done="Snapshot deleted.")
+
+
+@router.get("/snapshots/{snapshot_id}/download")
+def snapshot_download(snapshot_id: int, database=Depends(auth.get_db)):
+    snap = database.get(db.BoardSnapshot, snapshot_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="That snapshot no longer exists.")
+    return Response(snap.data, media_type="application/gzip",
+                    headers={"Content-Disposition": f'attachment; filename="job-board-snapshot-{snap.id}.json.gz"'})
 
 
 # ---------- jobs sync ----------

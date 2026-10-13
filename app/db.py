@@ -130,6 +130,22 @@ class Job(Base):
     found_by = Column(JSON)                     # {person id: [the search terms that found it]}: tells which searches still matter
 
 
+class BoardSnapshot(Base):
+    """A saved copy of the whole Job Board, taken by hand (or automatically just before a restore). See snapshots.py."""
+    __tablename__ = "board_snapshots"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    note = Column(String(300), default="")
+    kind = Column(String(10), nullable=False, default="manual")  # "manual", or "auto" for the safety copy made before a restore
+    created_at = Column(DateTime, default=utcnow)
+    created_by_id = Column(Integer, ForeignKey("people.id", ondelete="SET NULL"))
+    job_count = Column(Integer, default=0)
+    size_bytes = Column(Integer, default=0)
+    data = Column(LargeBinary, nullable=False)  # gzip of JSON: every column of every job
+
+    created_by = relationship(Person)
+
+
 class StagedJob(Base):
     """Fetched jobs waiting for Sync. `data` has the same fields as a Job."""
     __tablename__ = "staged_jobs"

@@ -1,4 +1,7 @@
-"""Browser notifications (Web Push): deadlines, new assignments and CV reviews, straight to Chrome.
+"""Browser notifications (Web Push) straight to Chrome.
+
+Admins hear when someone signs in or opens the site, and when a job is added to or changed in a Tracker.
+Users hear about deadlines coming up, jobs assigned to them, and if they have not been on for 3 days.
 
 Nothing to install: a person turns notifications on once from their Profile (Admin home for admins) and their
 browser registers with its own push service (Google's, for Chrome). We keep that registration and send to it.
@@ -22,6 +25,7 @@ log = logging.getLogger("jobbuddy")
 
 DIGEST_HOUR = 8       # local (UK) hour the daily deadline message goes out, once
 DIGEST_DAYS = 3       # deadlines this many days away (or fewer) are included
+INACTIVE_DAYS = 3     # a user not seen for this long gets a nudge, then again every this-many days
 PUSH_HOSTS = ("fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com", "push.apple.com")  # Chrome, Firefox, Edge, Safari
 
 
@@ -101,6 +105,44 @@ def notify(person_id, title, body, url="/", tag=""):
         log.warning("Push not started (%s)", type(e).__name__)
 
 
+# ---------- telling the admins ----------
+
+def _never_raises(fn):
+    """These run inside ordinary page requests: a notification problem must never break the page."""
+    def wrapper(*args, **kwargs):
+        if not configured():
+            return
+        try:
+            fn(*args, **kwargs)
+        except Exception as e:
+            log.warning("Notification skipped (%s)", type(e).__name__)
+    wrapper.__name__, wrapper.__doc__ = fn.__name__, fn.__doc__
+    return wrapper
+
+
+@_never_raises
+def admins(database, actor, title, body="", url="/admin", tag=""):
+    """Tell every admin except the person who did it."""
+    for admin in database.query(db.Person).filter(db.Person.role == "admin", db.Person.id != actor.id):
+        notify(admin.id, title, body, url, tag)
+
+
+@_never_raises
+def visit(database, person, what):
+    """Someone is on the site: signed in with their password, or came back with their cookie after a break."""
+    url = "/admin" if person.is_admin else f"/admin/users/{person.id}/tracker"
+    admins(database, person, f"{person.first_name} {what}", "" if person.is_admin else "Tap to open their Tracker.", url, tag=f"visit-{person.id}")
+
+
+@_never_raises
+def tracker_change(database, actor, entry, what, gone=False):
+    """A job was added to or changed in someone's Tracker. Same tag per job, so rapid edits replace each other."""
+    job = db.entry_job(entry)
+    owner = entry.person
+    url = f"/admin/users/{entry.person_id}/tracker" if gone else f"/admin/users/{entry.person_id}/entry/{entry.id}"
+    admins(database, actor, f"{owner.first_name} {what}", f"{job.title} · {job.company}", url, tag=f"entry-{entry.id}")
+
+
 # ---------- the daily deadline message ----------
 
 def _plural(n, word):
@@ -120,12 +162,25 @@ def digest_for(database, person, today):
     return f"{_plural(len(due), 'deadline')} coming up", "\n".join(lines)
 
 
+def inactivity_for(person, today):
+    """(title, body) if a user has been away 3 days, 6 days, 9 days and so on, else None."""
+    last = person.last_login or person.created_at
+    days = (today - last.date()).days if last else 0
+    if days >= INACTIVE_DAYS and days % INACTIVE_DAYS == 0:
+        return f"You haven't been on Job Buddy for {days} days", "Have a look at your Tracker and the Job Board."
+    return None
+
+
 def send_digest(database, today):
     sent = 0
     for person in database.query(db.Person).filter(db.Person.role == "user"):
         message = digest_for(database, person, today)
         if message:
             notify(person.id, message[0], message[1], "/tracker", tag="deadlines")
+            sent += 1
+        away = inactivity_for(person, today)
+        if away:
+            notify(person.id, away[0], away[1], "/", tag="inactive")
             sent += 1
     return sent
 

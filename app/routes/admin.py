@@ -177,6 +177,7 @@ async def assign(user_id: int, request: Request, database=Depends(auth.get_db), 
     title = db.entry_job(entry).title
     if created:
         notify.notify(user.id, f"New job from {person.first_name}", f"{title} · {db.entry_job(entry).company}", "/tracker", tag="assigned")
+        notify.tracker_change(database, person, entry, "had a job assigned by " + person.first_name)
     web.flash(request, f"Assigned {title} to {user.first_name}." if created else f"{user.first_name} already has {title}.")
     return web.redirect(back)
 

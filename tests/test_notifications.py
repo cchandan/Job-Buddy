@@ -89,24 +89,120 @@ def test_assigning_a_job_notifies_that_user_once(people, sent):
     assert pid == people["wife"] and payload["title"] == "New job from Dad" and "Graduate Data Analyst" in payload["body"]
 
 
-def test_cv_review_notifications_go_both_ways(people, sent):
-    make_job("j1", title="CV job")
-    wife, dad = signed_in("wife"), signed_in("dad")
-    turn_on(wife)
-    dad.post("/push/subscribe", {**GOOD, "endpoint": "https://fcm.googleapis.com/fcm/send/dad1"})
+def titles(sent):
+    return [payload["title"] for _, payload in sent]
+
+
+def subscribe(browser, name):
+    return browser.post("/push/subscribe", {**GOOD, "endpoint": f"https://fcm.googleapis.com/fcm/send/{name}"})
+
+
+def set_last_login(username, when):
+    with db.SessionLocal() as s:
+        s.query(db.Person).filter_by(username=username).one().last_login = when
+        s.commit()
+
+
+def test_admins_hear_about_sign_ins_and_returning_visits(people, sent):
+    from datetime import timedelta
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    wife = signed_in("wife")  # types the password
+    assert [(pid, p["title"], p["url"]) for pid, p in sent] == [(people["dad"], "Wife signed in", f"/admin/users/{people['wife']}/tracker")]
+    sent.clear()
+    wife.get("/tracker")  # straight after: same visit, nothing more
+    assert sent == []
+    set_last_login("wife", db.utcnow() - timedelta(minutes=20))
+    wife.get("/tracker")  # a short gap refreshes "last active" but is not a new visit
+    assert sent == []
+    set_last_login("wife", db.utcnow() - timedelta(hours=2))
+    assert wife.get("/tracker").status_code == 200  # back with the cookie, no password typed
+    assert titles(sent) == ["Wife is on Job Buddy"]
+
+
+def test_an_admin_does_not_hear_about_themselves(people, sent):
+    from datetime import timedelta
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    dad.get("/admin")
+    set_last_login("dad", db.utcnow() - timedelta(hours=3))
+    dad.get("/admin")
+    assert sent == []
+
+
+def test_every_admin_but_the_actor_is_told(people, sent):
+    from conftest import make_person
+    mum_id = make_person("mum", "admin")
+    mum, dad = signed_in("mum"), signed_in("dad")
+    subscribe(mum, "mum1")
+    subscribe(dad, "dad1")
+    sent.clear()
+    signed_in("wife")
+    assert sorted(pid for pid, _ in sent) == sorted([people["dad"], mum_id])
+    assert {p["title"] for _, p in sent} == {"Wife signed in"}
+
+
+def test_tracker_changes_reach_the_admin(people, sent):
+    make_job("j1", title="Graduate Data Analyst", company="Kite")
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    wife = signed_in("wife")
+    sent.clear()
     wife.post("/board/j1/shortlist")
     with db.SessionLocal() as s:
-        entry = s.query(db.TrackerEntry).one()
-        entry_id = entry.id
-        s.add(db.TailoredCV(entry_id=entry_id, text="JANE EXAMPLE\n\nEXPERIENCE\n- Tester at Acme 2022 to 2025\n\nSKILLS\n- Python, SQL"))
-        s.commit()
-    wife.post(f"/tracker/{entry_id}/cv/save", {"text": "JANE EXAMPLE\n\nEXPERIENCE\n- Tester at Acme 2022 to 2025\n\nSKILLS\n- Python, SQL, more", "then": "send"})
-    assert [(pid, p["title"]) for pid, p in sent] == [(people["dad"], "CV to review")]
-    assert "Wife sent a CV for CV job" in sent[0][1]["body"]
+        entry_id = s.query(db.TrackerEntry).one().id
+    wife.post(f"/tracker/{entry_id}/status", {"status": "applied"})
+    wife.post(f"/tracker/{entry_id}/deadline", {"deadline": "2026-11-01"})
+    wife.post(f"/tracker/{entry_id}/notes", {"notes": "Phoned them"})
+    wife.post("/tracker/new", {"title": "By hand", "company": "Acme"})
+    assert titles(sent) == ["Wife added a job to their Tracker", "Wife moved a job to Applied", "Wife changed a deadline",
+                            "Wife updated their notes on a job", "Wife added a job to their Tracker"]
+    assert all(pid == people["dad"] for pid, _ in sent)
+    first = sent[0][1]
+    assert "Graduate Data Analyst · Kite" in first["body"] and first["url"] == f"/admin/users/{people['wife']}/entry/{entry_id}"
     sent.clear()
-    dad.post(f"/admin/review/{entry_id}", {"decision": "approve"})
-    assert [(pid, p["title"]) for pid, p in sent] == [(people["wife"], "Your CV was approved")]
-    assert sent[0][1]["url"] == f"/tracker/{entry_id}/cv"
+    wife.post(f"/tracker/{entry_id}/status", {"status": "applied"})  # nothing changed, nothing sent
+    wife.post(f"/tracker/{entry_id}/remove")
+    assert titles(sent) == ["Wife removed a job from their Tracker"]
+    assert sent[0][1]["url"] == f"/admin/users/{people['wife']}/tracker"  # the job is gone, so open their Tracker
+
+
+def test_opening_an_advert_to_apply_is_reported_once(people, sent):
+    make_job("j1")
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    wife = signed_in("wife")
+    wife.post("/board/j1/shortlist")
+    with db.SessionLocal() as s:
+        entry_id = s.query(db.TrackerEntry).one().id
+    sent.clear()
+    assert wife.post(f"/tracker/{entry_id}/apply").status_code == 303
+    assert titles(sent) == ["Wife opened a job's advert to apply"]
+    wife.post(f"/tracker/{entry_id}/applied", {"answer": "yes"})
+    assert titles(sent)[-1] == "Wife moved a job to Applied"
+
+
+def test_cv_upload_and_delete_reach_the_admin(people, sent):
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    wife = signed_in("wife")
+    sent.clear()
+    wife.post("/profile/cv", {"cv_text": "Jane Example. Software tester at Acme 2022 to 2025. Skills: Python, SQL. " * 3})
+    wife.post("/profile/cv/delete")
+    assert titles(sent) == ["Wife uploaded their CV", "Wife deleted their CV"]
+
+
+def test_assigning_tells_the_user_and_the_other_admins(people, sent):
+    from conftest import make_person
+    mum_id = make_person("mum", "admin")
+    make_job("j1", title="Graduate Data Analyst", company="Kite")
+    mum, dad, wife = signed_in("mum"), signed_in("dad"), signed_in("wife")
+    subscribe(mum, "mum1")
+    turn_on(wife)
+    sent.clear()
+    dad.post(f"/admin/users/{people['wife']}/assign", {"how": "board", "job_id": "j1"})
+    assert {(pid, p["title"]) for pid, p in sent} == {(people["wife"], "New job from Dad"),
+                                                      (mum_id, "Wife had a job assigned by Dad")}
 
 
 def test_a_browser_that_has_gone_is_forgotten(people, sent, monkeypatch):
@@ -159,5 +255,44 @@ def test_applied_jobs_are_not_nagged(people, sent):
     with db.SessionLocal() as s:
         entry = s.query(db.TrackerEntry).one()
         wife.post(f"/tracker/{entry.id}/status", {"status": "applied"})
+    notify.run_daily_once(datetime(2026, 10, 5, 9, 0))
+    assert sent == []
+
+
+def test_users_are_nudged_after_three_days_away_then_every_three(people, sent):
+    from datetime import timedelta
+    wife = signed_in("wife")
+    turn_on(wife)
+    sent.clear()
+    noon = datetime(2026, 10, 5, 12, 0)
+    for gone, expect in ((2, False), (3, True), (4, False), (6, True)):
+        sent.clear()
+        set_last_login("wife", noon - timedelta(days=gone))
+        with db.SessionLocal() as s:
+            s.query(db.AppSetting).filter_by(key="last_digest").delete()
+            s.commit()
+        notify.run_daily_once(datetime(2026, 10, 5, 9, 0))
+        assert (titles(sent) == [f"You haven't been on Job Buddy for {gone} days"]) is expect, gone
+        if not expect:
+            assert sent == []
+
+
+def test_someone_who_never_signed_in_is_counted_from_when_the_account_was_made(people, sent):
+    wife = signed_in("wife")
+    turn_on(wife)
+    with db.SessionLocal() as s:
+        row = s.query(db.Person).filter_by(username="wife").one()
+        row.last_login, row.created_at = None, datetime(2026, 10, 2, 10, 0)
+        s.commit()
+    sent.clear()
+    notify.run_daily_once(datetime(2026, 10, 5, 9, 0))
+    assert titles(sent) == ["You haven't been on Job Buddy for 3 days"]
+
+
+def test_admins_get_no_inactivity_nudge(people, sent):
+    dad = signed_in("dad")
+    subscribe(dad, "dad1")
+    set_last_login("dad", datetime(2026, 9, 1))
+    sent.clear()
     notify.run_daily_once(datetime(2026, 10, 5, 9, 0))
     assert sent == []

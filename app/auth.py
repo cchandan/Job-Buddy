@@ -10,9 +10,10 @@ from datetime import timedelta
 
 from fastapi import Depends, HTTPException, Request
 
-from . import db
+from . import db, notify
 
 MAX_FAILURES = 5
+VISIT_MINUTES = 30  # a request after this long away counts as a new visit, and tells the admins
 LOCK_MINUTES = 10
 ACTIVE_MINUTES = 15  # how often "last active" is refreshed while someone stays signed in
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no look-alikes (0/o, 1/l/i)
@@ -122,9 +123,13 @@ def current_person(request: Request, database=Depends(get_db)):
         raise NeedLogin()
     # The cookie keeps people signed in for 30 days, so the sign-in form alone would leave this date stuck.
     now = db.utcnow()
-    if person.last_login is None or now - person.last_login >= timedelta(minutes=ACTIVE_MINUTES):
+    last = person.last_login
+    if last is None or now - last >= timedelta(minutes=ACTIVE_MINUTES):
+        new_visit = last is None or now - last >= timedelta(minutes=VISIT_MINUTES)
         person.last_login = now
         database.commit()
+        if new_visit:
+            notify.visit(database, person, "is on Job Buddy")
     return person
 
 

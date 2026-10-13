@@ -4,7 +4,7 @@ from datetime import date
 from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from .. import auth, cv_pdf, db, summary, tracking, web
+from .. import auth, cv_pdf, db, notify, summary, tracking, web
 
 router = APIRouter()
 TABS = [("", "All"), ("shortlisted", "Shortlisted"), ("applied", "Applied"), ("interviewing", "Interviewing"),
@@ -85,6 +85,7 @@ async def new_submit(request: Request, database=Depends(auth.get_db), person=Dep
     except tracking.TrackerFull:
         web.flash(request, "Your Tracker is full. Remove some old jobs first.", "bad")
         return web.redirect("/tracker")
+    notify.tracker_change(database, person, entry, "added a job to their Tracker")
     web.flash(request, f"Added {db.entry_job(entry).title} to your Tracker.")
     return web.redirect("/tracker")
 
@@ -126,6 +127,7 @@ async def edit_submit(entry_id: int, request: Request, database=Depends(auth.get
     entry.details, entry.deadline_override = details, deadline
     entry.notes = str(form.get("notes") or "").strip()[:4000]
     database.commit()
+    notify.tracker_change(database, person, entry, "edited a job")
     web.flash(request, "Saved.")
     return web.redirect(f"/tracker/{entry.id}")
 
@@ -135,6 +137,7 @@ def set_status(entry_id: int, request: Request, database=Depends(auth.get_db), p
                status: str = Form(""), next: str = Form("/tracker")):
     entry = auth.own_entry(database, person, entry_id)
     if tracking.set_status(database, entry, status, person):
+        notify.tracker_change(database, person, entry, f"moved a job to {web.STATUS_LABELS[status]}")
         web.flash(request, f"Marked as {web.STATUS_LABELS[status]}.")
     return web.redirect(web.safe_next(next, "/tracker"))
 
@@ -149,6 +152,7 @@ def set_deadline(entry_id: int, request: Request, database=Depends(auth.get_db),
         web.flash(request, "That date didn't look right, so the deadline wasn't changed.", "bad")
         return web.redirect(web.safe_next(next, f"/tracker/{entry.id}"))
     database.commit()
+    notify.tracker_change(database, person, entry, "changed a deadline")
     web.flash(request, "Deadline saved." if entry.deadline_override else "Your own deadline was cleared.")
     return web.redirect(web.safe_next(next, f"/tracker/{entry.id}"))
 
@@ -158,6 +162,7 @@ def set_notes(entry_id: int, request: Request, database=Depends(auth.get_db), pe
     entry = auth.own_entry(database, person, entry_id)
     entry.notes = notes.strip()[:4000]
     database.commit()
+    notify.tracker_change(database, person, entry, "updated their notes on a job")
     web.flash(request, "Notes saved.")
     return web.redirect(f"/tracker/{entry.id}")
 
@@ -166,6 +171,7 @@ def set_notes(entry_id: int, request: Request, database=Depends(auth.get_db), pe
 def remove(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only)):
     entry = auth.own_entry(database, person, entry_id)
     title = db.entry_job(entry).title
+    notify.tracker_change(database, person, entry, "removed a job from their Tracker", gone=True)
     database.delete(entry)
     database.commit()
     web.flash(request, f"Removed {title} from your Tracker.")
@@ -182,6 +188,7 @@ def apply(entry_id: int, request: Request, database=Depends(auth.get_db), person
     if entry.status == "shortlisted":
         entry.apply_clicked_at = db.utcnow()
         database.commit()
+        notify.tracker_change(database, person, entry, "opened a job's advert to apply")
     return web.redirect(url)
 
 
@@ -190,7 +197,8 @@ def applied(entry_id: int, request: Request, database=Depends(auth.get_db), pers
             answer: str = Form(""), next: str = Form("/tracker")):
     entry = auth.own_entry(database, person, entry_id)
     if answer == "yes":
-        tracking.set_status(database, entry, "applied", person)
+        if tracking.set_status(database, entry, "applied", person):
+            notify.tracker_change(database, person, entry, "moved a job to Applied")
         web.flash(request, "Marked as Applied. Good luck!")
     else:
         entry.apply_clicked_at = None

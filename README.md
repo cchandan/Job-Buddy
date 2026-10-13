@@ -1,16 +1,16 @@
 # Job Buddy
 
-A private job-application workspace for a family. Find jobs on a shared Job Board, shortlist them into your own Tracker, create a CV tailored to each one, apply, and keep track of deadlines and outcomes.
+A private job-application workspace for a family. Find jobs on a shared Job Board, shortlist them into your own Tracker, apply, and keep track of deadlines and outcomes.
 
 Built from the CareerOS hackathon project. `Plan/` holds the spec, design and build plan.
 
 ## What it does
 - **Home**: the page you land on after signing in. It shows what needs doing next; admins get their own version.
 - **Job Board**: live jobs fetched by an admin, tagged, each with a deadline and status. Shortlist the ones you want.
-- **Tracker**: your shortlisted and assigned jobs, plus any you add by link or by hand. Set the status (Applied, Interviewing, Rejected and so on), create a tailored CV, and jump to the advert to apply.
+- **Tracker**: your shortlisted and assigned jobs, plus any you add by link or by hand. Set the status (Applied, Interviewing, Rejected and so on), and jump to the advert to apply.
 - **Calendar**: every deadline from your Tracker.
-- **Profile**: your core CV, the base for each tailored CV.
-- **Admin**: see each user's sections, assign jobs to them, review their tailored CVs, fetch and sync the day's jobs, and create accounts.
+- **Profile**: your core CV, kept ready to send.
+- **Admin**: see each user's sections, assign jobs to them, fetch and sync the day's jobs, and create accounts.
 
 ## Who can use it
 Sign-in is with a username and password. There is no sign-up: an admin creates each account, and Job Buddy generates the password for the admin to pass on. There are two roles: **users** (job seekers) and **admins**.
@@ -28,10 +28,10 @@ Sign-in is with a username and password. There is no sign-up: an admin creates e
 |---|---|
 | `DATABASE_URL` | Postgres connection string. Leave unset to use a local SQLite file (`jobbuddy.db`) for local play and tests |
 | `SESSION_SECRET` | Signs the sign-in cookie; any long random string |
-| `GEMINI_API_KEY`, `GEMMA_MODEL` | The AI used to read adverts and write tailored CVs |
+| `GEMINI_API_KEY`, `GEMMA_MODEL` | The AI used to read adverts |
 | `AI_DAILY_LIMIT` | Daily cap on AI calls |
 
-Without an AI key the Job Board, Tracker, Calendar and Profile still work; only tailored CVs and AI tagging are unavailable.
+Without an AI key the Job Board, Tracker, Calendar and Profile still work; only AI tagging is unavailable.
 
 ## Refresh the jobs (admins, on your own laptop)
 Job sites block cloud servers, so refreshing runs on a laptop, not on the live site.
@@ -48,17 +48,22 @@ Or run the app (`uvicorn app.main:app`), open **Admin > Jobs sync** and press **
 - **Open or closed:** a few jobs per run get a polite page check (tracked jobs first). Only a clear sign (page gone, "expired", "no longer available") closes a job; a blocked check changes nothing. Jobs are never deleted.
 
 ## Browser notifications
-Chrome pop-ups, with nothing to install: deadlines in the next 3 days (one message at 8am UK time), a job an admin assigns, a CV approved or sent back, and (for admins) a CV sent for review. Free: the browser's own push service does the delivery.
+Chrome pop-ups, with nothing to install. Free: the browser's own push service does the delivery.
+- **Admins** are told when someone signs in or comes back to the site, and when a job is added to, changed in or removed from a Tracker (status, deadline, notes, edits, a CV uploaded or deleted). You are never told about your own actions.
+- **Users** are told about deadlines in the next 3 days (one message at 8am UK time, only for jobs not yet applied for), a job an admin assigns them, and, if they haven't been on for 3 days, a nudge (repeated every 3 days).
+
+Set up:
 1. Run `python scripts/make_vapid_keys.py` once and put `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (`mailto:` your email) in Render's environment (and `.env` locally). Redeploy.
 2. Each person opens **Profile** (admins: **Admin home**) in Chrome and presses **Turn on notifications**, then **Send a test**. Do it once in each browser or phone you use; it needs a normal window, not Incognito.
-- The 8am message is sent by the app itself, so the Render service must stay awake (a paid plan). On a free plan that sleeps, the assignment and review messages still work but the daily deadline message can be missed.
+- A "visit" is the first page opened after 30 minutes away, or a password sign-in. "Last active" on Admin home uses the same signal.
+- The 8am message is sent by the app itself, so the Render service must stay awake (a paid plan). On a free plan that sleeps, the instant messages still work but the daily one can be missed.
 - If you ever make a new key pair, everyone has to press **Turn on notifications** again.
-- Messages carry only a headline and a job title, never CV text. Without the keys the feature is simply off.
+- Messages carry only a headline and a job title. Without the keys the feature is simply off.
 
 ## Deploy
 Create a Render web service from `render.yaml` and set the settings above. Use the Supabase **pooled** connection string for `DATABASE_URL`. Each deploy runs `alembic upgrade head`, which creates or updates the tables. Then run `python scripts/create_admin.py` once against the live database to make the first admin account.
 
 ## Privacy
-Job Buddy stores each user's core CV and tailored CVs in its database so they can be reused. CV text is sent to the AI provider when a tailored CV is created. Admins can see users' CVs and Trackers. A user can delete their CVs at any time. Nothing is visible without signing in.
+Job Buddy stores each user's core CV in its database. Admins can see users' CVs and Trackers. A user can delete their CV at any time. Nothing is visible without signing in.
 
 Credits: [JobSpy](https://github.com/speedyapply/JobSpy) for fetching listings.

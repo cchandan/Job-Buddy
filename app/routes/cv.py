@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
-from .. import auth, cv_pdf, db, web
+from .. import auth, cv_pdf, db, notify, web
 from .tracker import users_only
 
 router = APIRouter()
@@ -41,6 +41,7 @@ async def upload_cv(request: Request, database=Depends(auth.get_db), person=Depe
         database.add(row)
     row.filename, row.data, row.text, row.uploaded_at = filename, data, text[:MAX_CV_TEXT], db.utcnow()
     database.commit()
+    notify.admins(database, person, f"{person.first_name} uploaded their CV", "", f"/admin/users/{person.id}/profile", tag=f"cv-{person.id}")
     web.flash(request, "Your core CV has been saved.")
     return web.redirect("/profile")
 
@@ -66,5 +67,6 @@ def delete_cv(request: Request, database=Depends(auth.get_db), person=Depends(us
     if row is not None:
         database.delete(row)
         database.commit()
+        notify.admins(database, person, f"{person.first_name} deleted their CV", "", f"/admin/users/{person.id}/profile", tag=f"cv-{person.id}")
         web.flash(request, "Your core CV has been deleted.")
     return web.redirect("/profile")

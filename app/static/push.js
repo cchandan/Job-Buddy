@@ -20,8 +20,15 @@
     return Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
   }
 
+  var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var installed = window.navigator.standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  if (ios && !installed) {  // an iPhone only allows notifications from a website that was added to the Home Screen
+    say("On an iPhone, notifications only work from the Home Screen app. In Safari tap Share, then Add to Home Screen. Then open Job Buddy from its new icon and turn notifications on here.");
+    on.hidden = true;
+    return;
+  }
   if (!("serviceWorker" in navigator && "PushManager" in window && "Notification" in window)) {
-    say("This browser can't show notifications. Chrome on a computer or Android phone can.");
+    say(ios ? "This iPhone can't show notifications. It needs iOS 16.4 or newer." : "This browser can't show notifications. Chrome on a computer or Android phone can.");
     on.hidden = true;
     return;
   }

@@ -63,6 +63,7 @@ Chrome pop-ups, with nothing to install. Free: the browser's own push service do
 Set up:
 1. Run `python scripts/make_vapid_keys.py` once and put `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (`mailto:` your email) in Render's environment (and `.env` locally). Redeploy.
 2. Each person opens **Profile** (admins: **Admin home**) in Chrome and presses **Turn on notifications**, then **Send a test**. Do it once in each browser or phone you use; it needs a normal window, not Incognito.
+- **iPhone:** Apple only allows notifications from a website added to the Home Screen as an app, on iOS 16.4 or newer, and not from Chrome or a Safari tab. Open Job Buddy in **Safari**, tap **Share**, then **Add to Home Screen**, open it from the new "jb." icon, then press **Turn on notifications** on Profile. Job Buddy ships a web app manifest (`/manifest.webmanifest`) and icons (`app/static/icons/`) so this works.
 - A "visit" is the first page opened after 30 minutes away, or a password sign-in. "Last active" on Admin home uses the same signal.
 - The 8am message is sent by the app itself, so the Render service must stay awake (a paid plan). On a free plan that sleeps, the instant messages still work but the daily one can be missed.
 - If you ever make a new key pair, everyone has to press **Turn on notifications** again.

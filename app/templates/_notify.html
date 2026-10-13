@@ -1,5 +1,5 @@
 {# The "Browser notifications" card. Needs: csrf (from web.page). #}
-<section class="card stack" id="notify" aria-label="Browser notifications" data-key="{{ push_key() }}" data-csrf="{{ csrf }}">
+<section class="panel panel--pad stack" id="notify" aria-label="Browser notifications" data-key="{{ push_key() }}" data-csrf="{{ csrf }}">
   <h2 class="t2">Browser notifications</h2>
   {% if push_ready() %}
   <p class="sub">{% if person.is_admin %}Get a pop-up in Chrome when someone signs in or opens Job Buddy, when a job is added to a Tracker, and when its status changes.{% else %}Get a pop-up in Chrome for deadlines in the next 3 days, jobs assigned to you, and a nudge if you haven't been on for 3 days.{% endif %} Nothing to install. Turn it on in each browser you use.</p>

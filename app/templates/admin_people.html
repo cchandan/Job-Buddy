@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% block title %}People{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">People</h1>
+    <p class="sub">Accounts, sign-up requests and passwords.</p>
+  </div>
+  <a class="btn btn--primary" href="/admin/people?add=1#add">{{ icon("plus", 18) }}Add a person</a>
+</div>
+
+{% if new_account %}
+<section class="secret" aria-label="New password" role="status">
+  <strong>{{ "Account created for" if new_account.what == "created" else "New password for" }} {{ new_account.name }}</strong>
+  <div>Username: <code>{{ new_account.username }}</code></div>
+  <div>Password: <code id="pw">{{ new_account.password }}</code> <button type="button" class="btn" id="copy">Copy</button></div>
+  <span>Write this down or send it now. It won't be shown again.{% if new_account.what == "reset" %} The old password no longer works.{% endif %}</span>
+</section>
+{% endif %}
+
+{% if add %}
+<section class="panel panel--pad stack" id="add" aria-label="Add a person">
+  <h2 class="t2">Add a person</h2>
+  <form method="post" action="/admin/accounts" class="stack">
+    {{ csrf_field() }}
+    <div class="rowx" style="align-items: flex-end">
+      <div class="field"><label class="lab" for="name">Name</label><input id="name" name="name" class="input" maxlength="80" required autofocus></div>
+      <div class="field"><label class="lab" for="new-username">Username (letters, numbers, dots or dashes)</label><input id="new-username" name="username" class="input" maxlength="40" minlength="3" autocapitalize="none" autocomplete="off" required></div>
+      <div class="field"><label class="lab" for="role">Role</label><select id="role" name="role" class="input"><option value="user">User (job seeker)</option><option value="admin">Admin</option></select></div>
+    </div>
+    <div class="rowx"><button class="btn btn--primary">Create account</button><a class="btn btn--quiet" href="/admin/people">Cancel</a></div>
+    <p class="by">Job Buddy makes the password and shows it to you once, to pass on.</p>
+  </form>
+</section>
+{% endif %}
+
+{% if signups %}
+<section class="banner-ok" aria-label="Sign-up requests">
+  <div class="rowx" style="justify-content: space-between">
+    <h2 class="t3">{{ signups|length }} sign-up request{{ '' if signups|length == 1 else 's' }}</h2>
+    <span class="by">Public sign-up is {{ "open" if signups_open else "closed" }} · <a class="lnk" href="/admin/settings">change in Settings</a></span>
+  </div>
+  {% for r in signups %}
+  <div class="prow prow--white">
+    <span class="av av--tint">{{ r.name[:1]|upper }}</span>
+    <div class="grow"><div class="jt">{{ r.name }}</div><div class="meta">Wants the username <code>{{ r.username }}</code> · asked {{ r.created_at|when }}</div></div>
+    <div class="rowx">
+      <form method="post" action="/admin/signups/{{ r.id }}/approve">{{ csrf_field() }}<button class="btn btn--primary">Approve</button></form>
+      <form method="post" action="/admin/signups/{{ r.id }}/reject" data-confirm="Decline {{ r.name }}'s request? Nothing is created.">{{ csrf_field() }}<button class="btn">Decline</button></form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="tabs" role="group" aria-label="Show">
+  <a class="tab {{ 'on' if tab == 'users' }}" href="/admin/people">Users <span class="by">{{ users|length }}</span></a>
+  <a class="tab {{ 'on' if tab == 'admins' }}" href="/admin/people?tab=admins">Admins <span class="by">{{ admins|length }}</span></a>
+</div>
+
+<div class="split split--manage">
+  <section class="panel" aria-label="{{ 'Admins' if tab == 'admins' else 'Users' }}">
+    <div class="scroll"><table class="tb">
+      <thead><tr><th>Name</th><th>Last active</th><th>{{ "Role" if tab == "admins" else "Tracker" }}</th><th class="right"><span class="vh">Actions</span></th></tr></thead>
+      <tbody>
+        {% if tab == "admins" %}
+        {% for a in admins %}
+        <tr {% if chosen and chosen.id == a.id %}class="sel"{% endif %}>
+          <td><div class="rowx" style="flex-wrap: nowrap"><span class="av av--lime">{{ a.initial }}</span><div><div class="jt">{{ a.name }}{{ " (you)" if a.id == person.id }}</div><div class="by">{{ a.username }}</div></div></div></td>
+          <td>{{ a.last_login|when if a.last_login else "Not yet" }}</td>
+          <td class="by">Admin</td>
+          <td><div class="rowx" style="justify-content: flex-end"><a class="btn {{ 'btn--ink' if chosen and chosen.id == a.id }}" href="/admin/people?tab=admins&amp;manage={{ a.id }}">Manage</a></div></td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        {% for row in users %}
+        {% set u = row.user %}
+        <tr {% if chosen and chosen.id == u.id %}class="sel"{% endif %}>
+          <td><div class="rowx" style="flex-wrap: nowrap"><span class="av av--tint">{{ u.initial }}</span><div><div class="jt">{{ u.name }}</div><div class="by">{{ u.username }}</div></div></div></td>
+          <td>{{ u.last_login|when if u.last_login else "Not yet" }}</td>
+          <td>{{ row.total }} job{{ '' if row.total == 1 else 's' }}{% if row.applied %} · {{ row.applied }} applied{% endif %}</td>
+          <td><div class="rowx" style="justify-content: flex-end"><a class="btn" href="/admin/users/{{ u.id }}/tracker">Open</a><a class="btn {{ 'btn--ink' if chosen and chosen.id == u.id }}" href="/admin/people?manage={{ u.id }}">Manage</a></div></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="sub">No users yet. Add a person to give them an account.</td></tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table></div>
+  </section>
+
+  {% if chosen %}
+  <aside class="panel panel--pad panel--ink stack" aria-label="Manage {{ chosen.first_name }}">
+    <div class="rowx" style="justify-content: space-between; align-items: flex-start">
+      <div><div class="by">Manage</div><h2 class="t2" style="font-size: 20px">{{ chosen.name }}</h2></div>
+      <a class="iconbtn" href="/admin/people{{ '?tab=admins' if chosen.is_admin }}" aria-label="Close">{{ icon("close", 18) }}</a>
+    </div>
+
+    {% if error %}<div class="flash flash--bad" role="alert">{{ error }}</div>{% endif %}
+    <div class="stack" style="gap: 10px">
+      <h3 class="t3">Password</h3>
+      {% if reveal and reveal.id == chosen.id %}
+        {% if reveal.password %}
+        <div class="codebox"><code>{{ reveal.password }}</code></div>
+        <p class="by">Shown for this visit only. You'll be asked for your password again next time.</p>
+        {% elif chosen.password_enc %}
+        <p class="sub">Can't be read (the key has changed). Make a new password.</p>
+        {% else %}
+        <p class="sub">Not available: they chose their own, or it was made before this feature. Make a new password if needed.</p>
+        {% endif %}
+      {% elif chosen.password_enc %}
+      <p class="by">Job Buddy made this one, so you can look it up.</p>
+      <div class="codebox codebox--mask"><code>•••• •••• •••• ••••</code></div>
+      <form method="post" action="/admin/people/{{ chosen.id }}/reveal" class="stack" style="gap: 8px">
+        {{ csrf_field() }}
+        <label class="lab" for="admin-pw">Type your own password to reveal it</label>
+        <div class="pw"><input id="admin-pw" name="password" type="password" class="input" autocomplete="current-password" required><button class="btn">Reveal</button></div>
+      </form>
+      {% else %}
+      <p class="sub">{{ chosen.first_name }} chose their own password, so it can't be shown.</p>
+      {% endif %}
+      <form method="post" action="/admin/accounts/{{ chosen.id }}/password" data-confirm="Give {{ chosen.first_name }} a new password? Their current one will stop working straight away.">{{ csrf_field() }}<button class="btn">Make a new password</button></form>
+    </div>
+
+    {% if profile %}
+    <div class="stack ruled" style="gap: 6px">
+      <h3 class="t3">Search</h3>
+      <p class="by">{{ profile.keywords.split(",")|length if profile.keywords else 0 }} keyword{{ '' if profile.keywords and profile.keywords.split(",")|length == 1 else 's' }}{% if profile.locations %} · {{ profile.locations }}{% endif %}{% if profile.needs_sponsorship %} · needs sponsorship{% endif %}{% if not profile.enabled %} · switched off{% endif %}</p>
+      <a class="lnk minh" href="/admin/searches?who={{ chosen.id }}">Edit {{ chosen.first_name }}'s search</a>
+    </div>
+    {% endif %}
+
+    {% if chosen.id != person.id %}
+    <details class="more ruled">
+      <summary class="lnk danger-text">Remove account</summary>
+      <form method="post" action="/admin/accounts/{{ chosen.id }}/remove" class="stack" style="gap: 8px" data-confirm="Remove {{ chosen.name }}? Their Tracker and CVs will be deleted for good.">
+        {{ csrf_field() }}
+        <p class="by">Deletes {{ chosen.first_name }}'s account, Tracker and CVs for good.</p>
+        <label class="lab" for="rm-{{ chosen.id }}">To remove {{ chosen.first_name }} and all their data, type their username</label>
+        <input id="rm-{{ chosen.id }}" name="confirm" class="input" autocomplete="off" required>
+        <div><button class="btn btn--danger">Remove account</button></div>
+      </form>
+    </details>
+    {% endif %}
+  </aside>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% if new_account %}
+<script>
+  document.getElementById("copy").addEventListener("click", function () {
+    var b = this;
+    navigator.clipboard.writeText(document.getElementById("pw").textContent).then(function () { b.textContent = "Copied"; });
+  });
+</script>
+{% endif %}
+{% endblock %}

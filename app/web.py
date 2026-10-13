@@ -4,10 +4,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, deadlines, notify
+from . import auth, db, deadlines, notify, summary
 
 HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(HERE / "templates"))
@@ -75,14 +74,14 @@ def flash(request, message, kind="ok"):
 
 def page(request, name, person, active="", status_code=200, **ctx):
     """Render a template with everything the shell needs."""
-    bin_count = 0
-    if person is not None and person.is_admin:  # the count beside "Bin" in the sidebar
+    nav = None
+    if person is not None and person.is_admin:  # the counts and dots in the admin sidebar
         with db.SessionLocal() as s:
-            bin_count = s.query(func.count(db.Job.id)).filter(db.Job.binned_at.isnot(None)).scalar()  # a count, never whole rows
+            nav = summary.nav(s, today())
     ctx.pop("database", None)
     ctx.setdefault("viewing", None)
     has_session = "session" in request.scope  # missing only on the last-resort error page
-    ctx.update(person=person, active=active, today=today(), bin_count=bin_count,
+    ctx.update(person=person, active=active, today=today(), nav=nav,
                csrf=auth.csrf_token(request) if has_session else "",
                flash=request.session.pop("flash", None) if has_session else None)
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/app.css?v=4">
+  <link rel="stylesheet" href="/static/app.css?v=5">
 </head>
 <body class="app">
 {% if viewing %}
@@ -26,22 +26,54 @@
 </div>
 {% endif %}
 
-{% if person %}
+{% if person and person.is_admin %}
+{% from "_macros.html" import icon %}
+<nav class="rail rail--admin" id="rail" aria-label="Admin">
+  <div class="rail-top">
+    <button type="button" class="burger" id="burger" aria-expanded="false" aria-controls="rail-body" aria-label="Open the menu">
+      <span class="ic-menu">{{ icon("menu", 24) }}</span><span class="ic-close">{{ icon("close", 24) }}</span>{% if nav and nav.needs %}<span class="burger-count" aria-hidden="true">{{ nav.needs }}</span>{% endif %}
+    </button>
+    <a href="/admin" class="mark">Job Buddy <span class="mark-tag">ADMIN</span></a>
+  </div>
+  <div class="rail-body" id="rail-body">
+    <div class="nav">
+      <a href="/admin" {% if active == "today" %}class="on" aria-current="page"{% endif %}>{{ icon("home") }}<span class="grow">Today</span>{% if nav and nav.needs %}<span class="count" aria-label="{{ nav.needs }} need you">{{ nav.needs }}</span>{% endif %}</a>
+    </div>
+    <div class="nav">
+      <span class="nav-label">People</span>
+      <a href="/admin/people" {% if active == "people" %}class="on" aria-current="page"{% endif %}>{{ icon("people") }}<span class="grow">People</span>{% if nav and nav.signups %}<span class="count" aria-label="{{ nav.signups }} sign-up request{{ '' if nav.signups == 1 else 's' }}">{{ nav.signups }}</span>{% endif %}</a>
+    </div>
+    <div class="nav">
+      <span class="nav-label">Jobs</span>
+      <a href="/board" {% if active == "board" %}class="on" aria-current="page"{% endif %}>{{ icon("board") }}<span class="grow">Job Board</span></a>
+      <a href="/admin/refresh" {% if active == "refresh" %}class="on" aria-current="page"{% endif %}>{{ icon("refresh") }}<span class="grow">Refresh</span>
+        {% if nav and nav.refresh_dot %}<span class="rdot rdot--{{ nav.refresh_dot }}" role="img" aria-label="{{ {'ok': 'Refresher is online', 'warn': 'Refresher has not checked in lately', 'bad': 'Refresher needs a look'}[nav.refresh_dot] }}"></span>{% if nav.refresh_time %}<span class="rtime">{{ nav.refresh_time }}</span>{% endif %}{% endif %}</a>
+      <a href="/admin/searches" {% if active == "searches" %}class="on" aria-current="page"{% endif %}>{{ icon("search") }}<span class="grow">Searches</span></a>
+      <a href="/admin/bin" {% if active == "bin" %}class="on" aria-current="page"{% endif %}>{{ icon("bin") }}<span class="grow">Bin</span>{% if nav and nav.tidy %}<span class="count count--quiet" aria-label="{{ nav.tidy }} ready to tidy">{{ nav.tidy }}</span>{% endif %}</a>
+      <a href="/admin/snapshots" {% if active == "snapshots" %}class="on" aria-current="page"{% endif %}>{{ icon("camera") }}<span class="grow">Snapshots</span></a>
+    </div>
+    <div class="nav nav--end">
+      <a href="/admin/settings" {% if active == "settings" %}class="on" aria-current="page"{% endif %}>{{ icon("settings") }}<span class="grow">Settings</span></a>
+    </div>
+    <div class="who">
+      <span class="av">{{ person.initial }}</span>
+      <div class="grow"><div class="wn">{{ person.first_name }}</div><div class="wr">Admin</div></div>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="signout" aria-label="Sign out" title="Sign out">{{ icon("signout") }}</button></form>
+    </div>
+  </div>
+</nav>
+{% elif person %}
 <nav class="rail" aria-label="Main">
   <a href="/" class="mark">Job Buddy</a>
   <div class="nav">
-    {% if person.is_admin %}
-      {% set links = [("admin", "Admin home", "/admin"), ("board", "Job Board", "/board"), ("sync", "Jobs sync", "/admin/sync"), ("bin", "Bin", "/admin/bin"), ("snapshots", "Snapshots", "/admin/snapshots"), ("refresher", "Refresher", "/admin/refresher")] %}
-    {% else %}
-      {% set links = [("home", "Home", "/"), ("board", "Job Board", "/board"), ("tracker", "Tracker", "/tracker"), ("calendar", "Calendar", "/calendar"), ("profile", "Profile", "/profile")] %}
-    {% endif %}
+    {% set links = [("home", "Home", "/"), ("board", "Job Board", "/board"), ("tracker", "Tracker", "/tracker"), ("calendar", "Calendar", "/calendar"), ("profile", "Profile", "/profile")] %}
     {% for key, label, href in links %}
-    <a href="{{ href }}" {% if active == key %}class="on" aria-current="page"{% endif %}>{{ label }}{% if key == "bin" and bin_count %} <span class="count">{{ bin_count }}</span>{% endif %}</a>
+    <a href="{{ href }}" {% if active == key %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </div>
   <div class="who">
     <span class="av">{{ person.initial }}</span>
-    <div><div class="wn">{{ person.first_name }}</div><div class="wr">{{ "Admin" if person.is_admin else "User" }}</div></div>
+    <div><div class="wn">{{ person.first_name }}</div><div class="wr">User</div></div>
     <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Sign out</button></form>
   </div>
 </nav>
@@ -64,6 +96,18 @@
   <small>This can take up to a minute.</small>
 </div>
 <script>
+  // The admin menu: a button beside the name on a phone.
+  (function () {
+    var burger = document.getElementById("burger"), rail = document.getElementById("rail");
+    if (!burger) return;
+    burger.addEventListener("click", function () {
+      var open = rail.classList.toggle("open");
+      burger.setAttribute("aria-expanded", open);
+      burger.setAttribute("aria-label", open ? "Close the menu" : "Open the menu");
+      document.body.classList.toggle("menu-open", open);
+    });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && rail.classList.contains("open")) burger.click(); });
+  })();
   // Slow forms show a message instead of a frozen page.
   document.querySelectorAll("form[data-loading]").forEach(function (f) {
     f.addEventListener("submit", function () {

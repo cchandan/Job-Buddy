@@ -1,5 +1,5 @@
 """One-click refresh: fetch from every ticked source -> tag only what is new or changed -> check a few old jobs -> publish.
-Each of those stages (scrape, liveness, publish) can also be run on its own from Admin > Jobs sync.
+Each of those stages (scrape, liveness, publish) can also be run on its own from Admin > Refresh.
 
 Runs on an admin's laptop, never the server. Every step is saved as it goes, so a stop, a rate limit or a closed laptop
 loses nothing: press Refresh again and it carries on, and jobs it already knows are not tagged again.
@@ -63,17 +63,18 @@ def disabled_sources(database):
     return set(split_list(row.value)) if row is not None and row.value else set()
 
 
-def save_sources(database, ticked):
-    """Remember which sources are ticked. A source that cannot run here (no tools or key) keeps whatever it was set to.
+def save_sources(database, ticked, any_source=False):
+    """Remember which sources are ticked. A source that cannot run here (no tools or key) keeps whatever it was set to,
+    unless `any_source` is set: the live site fetches nothing itself, so there every source is the refresher's to use.
     Returns the sources that are now switched on and able to run."""
     ticked, off = set(ticked), disabled_sources(database)
     for name in sources.names():
-        if sources.unavailable_reason(name):
+        if sources.unavailable_reason(name) and not any_source:
             continue
         (off.discard if name in ticked else off.add)(name)
     database.merge(db.AppSetting(key=SOURCES_KEY, value=",".join(sorted(off))))
     database.commit()
-    return [n for n in sources.names() if n not in off and not sources.unavailable_reason(n)]
+    return [n for n in sources.names() if n not in off and (any_source or not sources.unavailable_reason(n))]
 
 
 class Cannot(Exception):
@@ -82,7 +83,7 @@ class Cannot(Exception):
 
 UK_CITIES = ["London", "Manchester", "Leeds", "Bristol", "Edinburgh", "Glasgow", "Reading", "Cambridge", "Leamington Spa",
              "Guildford", "Sheffield"]
-# ponytail: starter searches live here, keyed by first name; the admin edits them on Admin > Jobs sync. Move to a file if more people join.
+# ponytail: starter searches live here, keyed by first name; the admin edits them on Admin > Refresh. Move to a file if more people join.
 PRESETS = {
     "priya": dict(
         keywords="business analyst, technical business analyst, Appian business analyst, functional consultant, product owner, "
@@ -502,7 +503,7 @@ def _scrape(run, state):
         per_search = max([p.per_search or 100 for p in rows] or [100])
         names = {p.person_id: p.person.first_name for p in rows if p.enabled and split_list(p.keywords)}
     if not plan:
-        raise Cannot("Nobody has job titles or keywords set. Add some in Admin > Jobs sync first.")
+        raise Cannot("Nobody has job titles or keywords set. Add some in Admin > Refresh first.")
 
     with db.SessionLocal() as s:
         disabled = disabled_sources(s)

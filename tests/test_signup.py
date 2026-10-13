@@ -66,7 +66,7 @@ def test_the_password_is_only_ever_stored_as_a_hash(people, browser):
 def test_admin_approves_and_the_person_signs_in_with_their_own_password(people, browser):
     ask(browser)
     dad = signed_in("dad")
-    page = dad.get("/admin").text
+    page = dad.get("/admin/people").text
     assert "Sign-up request" in page and "Priya Patel" in page and "priya.p" in page
     with db.SessionLocal() as s:
         request_id = s.query(db.SignupRequest).one().id
@@ -80,7 +80,7 @@ def test_admin_approves_and_the_person_signs_in_with_their_own_password(people, 
     assert priya.login("priya.p", NEW["password"]).status_code == 303
     assert priya.get("/tracker").status_code == 200
     assert priya.get("/admin").status_code == 403
-    assert "Sign-up request" not in dad.get("/admin").text
+    assert "Wants the username" not in dad.get("/admin/people").text
 
 
 def test_admin_declines(people, browser):
@@ -166,9 +166,9 @@ def test_the_waiting_list_has_a_ceiling(people, monkeypatch):
 
 def test_an_admin_can_close_and_reopen_sign_up(people, browser):
     dad = signed_in("dad")
-    assert "Close sign-up" in dad.get("/admin").text
+    assert "Close sign-up" in dad.get("/admin/settings").text
     dad.post("/admin/signups/toggle")
-    assert "Open sign-up" in dad.get("/admin").text
+    assert "Open sign-up" in dad.get("/admin/settings").text
     assert "Sign-up is closed" in browser.get("/signup").text
     r = ask(browser)
     assert r.status_code == 403 and requests_waiting() == []

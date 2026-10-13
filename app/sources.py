@@ -41,14 +41,14 @@ def unavailable_reason(name):
 
 def plan(disabled=()):
     """([sources to use], [(source, why not)]). This is the first thing the run log says. `disabled` is what the admin
-    has unticked on Admin > Jobs sync."""
+    has unticked on Admin > Refresh."""
     picked, skipped = [], [(n, why) for n, why in NOT_USED.items()]
     for name in names():
         why = unavailable_reason(name)
         if why:
             skipped.append((name, why))
         elif name in disabled:
-            skipped.append((name, "turned off in Admin > Jobs sync"))
+            skipped.append((name, "turned off in Admin > Refresh"))
         else:
             picked.append(name)
     return picked, skipped

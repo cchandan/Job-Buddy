@@ -1,146 +1,88 @@
 {% extends "base.html" %}
-{% from "_macros.html" import chip, status_badge, csrf_field with context %}
-{% block title %}Admin home{% endblock %}
+{% from "_macros.html" import chip, csrf_field, icon with context %}
+{% block title %}Today{% endblock %}
 {% block content %}
 <div class="head">
   <div>
     <h1 class="t">{{ greeting }}, {{ person.first_name }}</h1>
-    <p class="sub">{{ line }}</p>
+    <p class="sub">{{ line }}{% if last_sync and last_sync.new %} {{ last_sync.new }} new job{{ '' if last_sync.new == 1 else 's' }} last time.{% endif %}</p>
   </div>
-  <div class="rowx">
-    <a class="btn" href="/admin/passwords">View passwords</a>
-    <a class="btn btn--primary" href="/admin/sync">Refresh jobs</a>
-  </div>
+  <a class="btn" href="/board">Open Job Board</a>
 </div>
 
-{% if new_account %}
-<section class="secret" aria-label="New password" role="status">
-  <strong>{{ "Account created for" if new_account.what == "created" else "New password for" }} {{ new_account.name }}</strong>
-  <div>Username: <code>{{ new_account.username }}</code></div>
-  <div>Password: <code id="pw">{{ new_account.password }}</code> <button type="button" class="btn" id="copy">Copy</button></div>
-  <span>Write this down or send it now. It won't be shown again.{% if new_account.what == "reset" %} The old password no longer works.{% endif %}</span>
-</section>
-{% endif %}
-
-{% if signups or stale or urgent or notes %}
-<section class="card stack" aria-label="Needs you">
-  <h2 class="t2">Needs you</h2>
-  {% for r in signups %}
-  <div class="next-row">
-    <div class="grow"><div class="by">Sign-up request · {{ r.created_at|when }}</div><div class="jt">{{ r.name }}</div><div class="meta">Wants the username <code>{{ r.username }}</code></div></div>
-    <div class="rowx">
-      <form method="post" action="/admin/signups/{{ r.id }}/approve">{{ csrf_field() }}<button class="btn btn--primary">Approve</button></form>
-      <form method="post" action="/admin/signups/{{ r.id }}/reject" data-confirm="Decline {{ r.name }}'s request? Nothing is created.">{{ csrf_field() }}<button class="btn btn--danger">Decline</button></form>
-    </div>
-  </div>
-  {% endfor %}
-  {% if stale %}
-  <div class="notice"><span>{% if last_sync %}The Job Board was last updated {{ last_sync.at|dmy }}{% if last_sync.person %} by {{ last_sync.person.first_name }}{% endif %}, {{ board_age }} days ago.{% else %}The Job Board has never been synced. It shows the {{ job_count }} starter jobs.{% endif %}</span><a class="btn btn--primary" href="/admin/sync">Refresh jobs</a></div>
-  {% endif %}
-  {% for note in notes %}<div class="notice"><span>{{ note }}</span><a class="btn" href="/admin/sync">See the log</a></div>{% endfor %}
-  {% for item in urgent %}
-  <div class="next-row">
-    <div class="grow"><div class="by">Deadline close, not applied yet</div><div class="jt">{{ item.user.first_name }} · {{ item.job.title }}</div><div class="meta">{{ item.job.company }}</div></div>
-    <div class="rowx">{{ chip(item.chip) }}<a class="btn" href="/admin/users/{{ item.user.id }}/entry/{{ item.entry.id }}">View</a></div>
-  </div>
-  {% endfor %}
-</section>
-{% endif %}
-
-<div class="cols2" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start">
-  {% for card in cards %}
-  {% set u = card.user %}
-  <section class="card stack" aria-label="{{ u.name }}">
-    <div class="rowx" style="gap: 12px">
-      <span class="av" style="background: var(--cobalt-tint)">{{ u.initial }}</span>
-      <div class="grow"><div class="t2">{{ u.name }}</div><div class="by">{{ u.username }} · {{ ("last active " ~ (u.last_login|when)) if u.last_login else "has not signed in yet" }}</div></div>
-      <a class="btn btn--primary" href="/admin/users/{{ u.id }}/tracker">Open</a>
-    </div>
-    <div class="rowx">
-      {% for s in STATUSES if card.counts[s] %}<span class="badge {{ {'shortlisted': 'b-short', 'applied': 'b-applied', 'interviewing': 'b-interview', 'offer': 'b-offer', 'rejected': 'b-rejected', 'withdrawn': 'b-withdrawn'}[s] }}">{{ STATUS_LABELS[s] }} {{ card.counts[s] }}</span>{% else %}<span class="sub">Nothing in their Tracker yet</span>{% endfor %}
-    </div>
-    <div class="tight">
-      <div class="lab">Next deadlines</div>
-      {% for v in card.next %}
-      <div class="rowx" style="justify-content: space-between"><span>{{ v.job.title }} · {{ v.job.company }}</span>{{ chip(v.chip) }}</div>
-      {% else %}<span class="sub">No deadlines coming up</span>{% endfor %}
-    </div>
-    <details class="more">
-      <summary class="lnk">Account</summary>
-      <div class="stack">
-        <form method="post" action="/admin/accounts/{{ u.id }}/password" data-confirm="Give {{ u.first_name }} a new password? Their current one will stop working straight away.">{{ csrf_field() }}<button class="btn">New password</button></form>
-        <form method="post" action="/admin/accounts/{{ u.id }}/remove" class="rowx" style="align-items: flex-end" data-confirm="Remove {{ u.name }}? Their Tracker and CVs will be deleted for good.">
-          {{ csrf_field() }}
-          <div class="field"><label class="lab" for="rm-{{ u.id }}">To remove {{ u.first_name }} and all their data, type their username</label><input id="rm-{{ u.id }}" name="confirm" class="input" autocomplete="off" required></div>
-          <button class="btn btn--danger">Remove account</button>
-        </form>
-      </div>
-    </details>
-  </section>
+<section class="glance" aria-label="At a glance">
+  {% if refreshers %}
+  {% set r = refreshers[0] %}
+  <a class="stat" href="/admin/refresh">
+    <span class="stat-k">Refresher</span>
+    <span class="stat-v"><span class="rdot rdot--{{ {'online': 'ok', 'quiet': 'warn', 'never': 'warn'}.get(r.health[0], 'bad') }}"></span>{{ r.health[1] if r.health[0] != "online" else "Online" }}</span>
+    <span class="stat-s">{% if r.row.state == "running" %}Refreshing now{% elif refreshers|length > 1 %}{{ refreshers|length }} computers{% else %}{{ r.row.name }}{% endif %}</span>
+  </a>
   {% else %}
-  <section class="card empty"><h2 class="t2">No users yet</h2><p class="sub">Add a person below to give them an account.</p></section>
-  {% endfor %}
-</div>
-
-<div class="cols2" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start">
-  <section class="card stack" aria-label="Add a person">
-    <h2 class="t2">Add a person</h2>
-    <form method="post" action="/admin/accounts" class="stack">
-      {{ csrf_field() }}
-      <div class="field"><label class="lab" for="name">Name</label><input id="name" name="name" class="input" maxlength="80" required></div>
-      <div class="field"><label class="lab" for="new-username">Username (letters, numbers, dots or dashes)</label><input id="new-username" name="username" class="input" maxlength="40" minlength="3" autocapitalize="none" autocomplete="off" required></div>
-      <div class="field"><label class="lab" for="role">Role</label><select id="role" name="role" class="input"><option value="user">User (job seeker)</option><option value="admin">Admin</option></select></div>
-      <div><button class="btn btn--primary">Create account</button></div>
-      <p class="by">Job Buddy makes the password and shows it to you once, to pass on.</p>
-    </form>
-  </section>
-
-  <section class="card stack" aria-label="Public sign-up">
-    <h2 class="t2">Public sign-up</h2>
-    <p class="sub">{% if signups_open %}Anyone can ask for an account on the public page. Nothing is created until you approve it.{% else %}Closed. Nobody new can ask for an account.{% endif %}</p>
-    <form method="post" action="/admin/signups/toggle" {% if signups_open %}data-confirm="Close public sign-up? Requests already waiting stay here."{% endif %}>{{ csrf_field() }}<button class="btn">{{ "Close sign-up" if signups_open else "Open sign-up" }}</button></form>
-  </section>
-
-  <section class="card stack" aria-label="Admins">
-    <h2 class="t2">Admins</h2>
-    {% for a in admins %}
-    <div class="next-row">
-      <div class="grow"><div class="t3">{{ a.name }}{{ " (you)" if a.id == person.id }}</div><div class="by">{{ a.username }} · {{ ("last active " ~ (a.last_login|when)) if a.last_login else "has not signed in yet" }}</div></div>
-      <form method="post" action="/admin/accounts/{{ a.id }}/password" data-confirm="Make a new password for {{ a.first_name }}? The current one will stop working straight away.">{{ csrf_field() }}<button class="btn">New password</button></form>
-    </div>
-    {% endfor %}
-    <details class="more">
-      <summary class="lnk">Change my password</summary>
-      <form method="post" action="/profile/password" class="stack">
-        {{ csrf_field() }}
-        <div class="field"><label class="lab" for="current">Current password</label><input id="current" name="current" type="password" class="input" autocomplete="current-password" required></div>
-        <div class="field"><label class="lab" for="new">New password (at least 10 characters)</label><input id="new" name="new" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
-        <div class="field"><label class="lab" for="again">New password again</label><input id="again" name="again" type="password" class="input" autocomplete="new-password" minlength="10" required></div>
-        <div><button class="btn">Change password</button></div>
-      </form>
-    </details>
-  </section>
-</div>
-
-{% include "_notify.html" %}
-
-<section class="card stack" aria-label="Recent activity">
-  <h2 class="t2">Recent activity</h2>
-  {% if activity %}
-  <div class="scroll"><table class="tb">
-    <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
-    <tbody>{% for a in activity %}<tr><td>{{ a.at|when }}</td><td>{{ a.who }}</td><td>{{ a.what }}</td></tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="sub">Nothing yet. Activity appears here as jobs are synced, assigned and applied for.</p>{% endif %}
+  <a class="stat" href="/admin/refresh"><span class="stat-k">Refresher</span><span class="stat-v">Not set up</span><span class="stat-s">Add the home computer</span></a>
+  {% endif %}
+  <a class="stat" href="/board"><span class="stat-k">Job Board</span><span class="stat-v">{{ job_count }} job{{ '' if job_count == 1 else 's' }}</span><span class="stat-s">{{ new_today }} new today · {{ closed_today }} closed</span></a>
+  <a class="stat" href="/admin/bin"><span class="stat-k">Bin</span><span class="stat-v">{{ tidy.expired + tidy.irrelevant }} to tidy</span><span class="stat-s">{{ tidy.expired }} expired · {{ tidy.irrelevant }} off-topic</span></a>
+  <a class="stat" href="/admin/snapshots"><span class="stat-k">Last snapshot</span><span class="stat-v">{{ last_snapshot.created_at|when if last_snapshot else "None yet" }}</span><span class="stat-s">{{ last_snapshot.name if last_snapshot else "Take one before big changes" }}</span></a>
 </section>
-{% endblock %}
-{% block scripts %}
-{% if new_account %}
-<script>
-  document.getElementById("copy").addEventListener("click", function () {
-    var b = this;
-    navigator.clipboard.writeText(document.getElementById("pw").textContent).then(function () { b.textContent = "Copied"; });
-  });
-</script>
-{% endif %}
+
+<div class="split">
+  <div class="stack-lg">
+    <section class="panel" aria-label="Needs you">
+      <div class="panel-head"><h2 class="t2">Needs you</h2>{% if needs %}<span class="count">{{ needs|length }}</span>{% endif %}</div>
+      {% for n in needs %}
+      {% if n.kind == "signup" %}
+      <div class="prow">
+        <span class="ico ico--blue">{{ icon("user-plus") }}</span>
+        <div class="grow"><div class="by">Sign-up request · {{ n.req.created_at|when }}</div><div class="jt">{{ n.req.name }} wants the username <code>{{ n.req.username }}</code></div></div>
+        <div class="rowx">
+          <form method="post" action="/admin/signups/{{ n.req.id }}/approve"><input type="hidden" name="next" value="/admin">{{ csrf_field() }}<button class="btn btn--primary">Approve</button></form>
+          <form method="post" action="/admin/signups/{{ n.req.id }}/reject" data-confirm="Decline {{ n.req.name }}'s request? Nothing is created."><input type="hidden" name="next" value="/admin">{{ csrf_field() }}<button class="btn">Decline</button></form>
+        </div>
+      </div>
+      {% elif n.kind == "deadline" %}
+      <div class="prow">
+        <span class="ico ico--coral">{{ icon("clock") }}</span>
+        <div class="grow"><div class="by">Deadline close, not applied yet</div><div class="jt">{{ n.user.first_name }} · {{ n.job.title }}</div><div class="meta">{{ n.job.company }}</div></div>
+        <div class="rowx">{{ chip(n.chip) }}<a class="btn" href="/admin/users/{{ n.user.id }}/entry/{{ n.entry.id }}">View</a></div>
+      </div>
+      {% else %}
+      <div class="prow">
+        <span class="ico ico--amber">{{ icon("alert") }}</span>
+        <div class="grow"><div class="by">Refresh</div><div class="jt">{{ n.title }}</div>{% if n.text %}<div class="meta">{{ n.text }}</div>{% endif %}</div>
+        <a class="btn" href="/admin/refresh#history">See the log</a>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="prow prow--calm"><span class="ico ico--green">{{ icon("check") }}</span><div class="grow"><div class="jt">Nothing needs you</div><div class="meta">New sign-ups, close deadlines and refresh problems show up here.</div></div></div>
+      {% endfor %}
+    </section>
+
+    <section class="panel" aria-label="People">
+      <div class="panel-head"><h2 class="t2">People</h2><a class="lnk" href="/admin/people">Manage people</a></div>
+      {% for card in cards %}
+      {% set u = card.user %}
+      <div class="prow">
+        <span class="av av--tint">{{ u.initial }}</span>
+        <div class="grow"><div class="jt">{{ u.name }}</div><div class="meta">{{ ("Active " ~ (u.last_login|when)) if u.last_login else "Has not signed in yet" }}{% if card.next %} · next deadline {{ card.next[0].job.company }}, {{ card.next[0].chip.text|lower }}{% else %} · no deadlines coming up{% endif %}</div></div>
+        <div class="rowx">
+          {% for s in STATUSES if card.counts[s] %}<span class="badge {{ {'shortlisted': 'b-short', 'applied': 'b-applied', 'interviewing': 'b-interview', 'offer': 'b-offer', 'rejected': 'b-rejected', 'withdrawn': 'b-withdrawn'}[s] }}">{{ STATUS_LABELS[s] }} {{ card.counts[s] }}</span>{% else %}<span class="by">Nothing in their Tracker yet</span>{% endfor %}
+        </div>
+        <a class="btn" href="/admin/users/{{ u.id }}/tracker">Open Tracker</a>
+      </div>
+      {% else %}
+      <div class="prow prow--calm"><div class="grow"><div class="jt">No users yet</div><div class="meta">Add the first person from People.</div></div><a class="btn btn--primary" href="/admin/people?add=1">Add a person</a></div>
+      {% endfor %}
+    </section>
+  </div>
+
+  <section class="panel panel--pad" aria-label="Recent activity">
+    <h2 class="t2">Recent activity</h2>
+    {% if activity %}
+    <ul class="feed">
+      {% for a in activity %}<li><span class="feed-dot"></span><div><div><strong>{{ a.who }}</strong> {{ a.what }}</div><div class="by">{{ a.at|when }}</div></div></li>{% endfor %}
+    </ul>
+    {% else %}<p class="sub">Nothing yet. Activity appears here as jobs are refreshed, assigned and applied for.</p>{% endif %}
+  </section>
+</div>
 {% endblock %}

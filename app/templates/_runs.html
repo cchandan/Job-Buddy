@@ -1,26 +1,36 @@
-{# The log of recent runs. Needs: runs (from runlog.recent). #}
-<section class="card stack" aria-label="What happened">
-  <h2 class="t2">What happened</h2>
+{# The history of recent runs, newest first. Needs: runs (from runlog.recent). #}
+<section class="panel" id="history" aria-label="History">
+  <div class="panel-head"><h2 class="t2">History</h2><span class="by">Every run, from the home computer or a laptop, in one list</span></div>
   {% if runs %}
+  <div class="hist hist--head" aria-hidden="true"><span>When</span><span>Where</span><span>Result</span><span>New</span><span>Updated</span><span>Closed</span></div>
   {% for run, events in runs %}
-  <details {% if loop.first %}open{% endif %}>
-    <summary><strong>{{ run.started|when }}</strong> ·
-      {% if run.status == "complete" %}<span class="badge b-ok">Complete</span>{% elif run.status == "running" %}<span class="badge b-none">Running</span>{% elif run.status == "partial" %}<span class="badge">Partial</span>{% else %}<span class="badge b-bad">Failed</span>{% endif %}
-      {% set sm = run.summary or {} %}{% if sm.refresher %}<span class="tag">{{ sm.refresher }}</span>{% endif %}{% if sm.stages and sm.stages|length < 3 %}<span class="tag">{{ sm.stages|join(" + ") }} only</span>{% endif %}
-      {% if sm.new is defined %} {{ sm.new }} new · {{ sm.updated }} updated · {{ sm.seen }} unchanged · {{ sm.closed }} closed{% elif sm.checked is defined %} {{ sm.checked }} checked · {{ sm.closed }} closed{% elif sm.pushed %} {{ sm.pushed.sent }} sent · {{ sm.pushed.closed }} closed{% endif %}</summary>
-    {% if sm.sources %}
-    <div class="scroll"><table class="tb">
-      <thead><tr><th>Source</th><th>Searches</th><th>Jobs returned</th><th>Result</th></tr></thead>
-      <tbody>{% for name, info in sm.sources.items() %}<tr><td>{{ name }}</td><td>{{ info.searches }}{% if info.failed_searches %} ({{ info.failed_searches }} failed){% endif %}</td><td>{{ info.returned }}</td>
-        <td>{% if info.failed %}Failed{% elif info.failed_searches %}Partly failed{% else %}OK{% endif %}</td></tr>{% endfor %}</tbody>
-    </table></div>
-    {% endif %}
-    {% if sm.backends %}<p><strong>{{ "Model" if sm.backends|length == 1 else "Models" }} used:</strong> <span class="tag">{{ sm.backends|join(", ") }}</span></p>{% endif %}
-    {% if sm.ai_calls is defined %}<p class="by">AI: {{ sm.ai_calls }} call{{ '' if sm.ai_calls == 1 else 's' }}, avoided for {{ sm.ai_avoided }} job{{ '' if sm.ai_avoided == 1 else 's' }}{% if sm.keyword_only %} · {{ sm.keyword_only }} tagged by keywords only{% endif %}.</p>{% endif %}
-    <ul class="tight" style="list-style: none; padding: 0">
-      {% for e in events if not (e.stage == "plan" and e.level == "info") %}<li class="by" style="{% if e.level == 'error' %}color: #b4230f{% elif e.level == 'warn' %}color: #8a5a00{% endif %}"><span class="tag">{{ e.stage }}</span> {{ e.message }}</li>{% endfor %}
-    </ul>
+  {% set sm = run.summary or {} %}
+  {% set bad = events|selectattr("level", "in", ["warn", "error"])|list|length %}
+  <details class="run" {% if loop.first %}open{% endif %}>
+    <summary class="hist">
+      <span class="strong">{{ run.started|when }}</span>
+      <span>{{ sm.refresher or "This computer" }}{% if sm.stages and sm.stages|length < 3 %} <span class="tag">{{ sm.stages|join(" + ") }} only</span>{% endif %}</span>
+      <span>{% if run.status == "complete" %}<span class="badge b-ok">Done</span>{% elif run.status == "running" %}<span class="badge b-none">Running</span>{% elif run.status == "partial" %}<span class="badge b-closing">Done, {{ bad }} warning{{ '' if bad == 1 else 's' }}</span>{% else %}<span class="badge b-rejected">Failed</span>{% endif %}</span>
+      <span>{{ sm.new if sm.new is defined else (sm.pushed.sent if sm.pushed else "–") }}</span>
+      <span>{{ sm.updated if sm.updated is defined else "–" }}</span>
+      <span>{{ sm.closed if sm.closed is defined else (sm.pushed.closed if sm.pushed else "–") }}</span>
+    </summary>
+    <div class="run-body stack" style="gap: 10px">
+      {% if sm.checked is defined %}<p class="by">{{ sm.checked }} checked · {{ sm.closed }} closed.</p>{% endif %}
+      {% if sm.sources %}
+      <div class="scroll"><table class="tb">
+        <thead><tr><th>Source</th><th>Searches</th><th>Jobs returned</th><th>Result</th></tr></thead>
+        <tbody>{% for name, info in sm.sources.items() %}<tr><td>{{ name }}</td><td>{{ info.searches }}{% if info.failed_searches %} ({{ info.failed_searches }} failed){% endif %}</td><td>{{ info.returned }}</td>
+          <td>{% if info.failed %}Failed{% elif info.failed_searches %}Partly failed{% else %}OK{% endif %}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+      {% if sm.backends %}<p class="by"><strong>{{ "Model" if sm.backends|length == 1 else "Models" }} used:</strong> <span class="tag">{{ sm.backends|join(", ") }}</span></p>{% endif %}
+      {% if sm.ai_calls is defined %}<p class="by">AI: {{ sm.ai_calls }} call{{ '' if sm.ai_calls == 1 else 's' }}, avoided for {{ sm.ai_avoided }} job{{ '' if sm.ai_avoided == 1 else 's' }}{% if sm.keyword_only %} · {{ sm.keyword_only }} tagged by keywords only{% endif %}.</p>{% endif %}
+      <ul class="logbox">
+        {% for e in events if not (e.stage == "plan" and e.level == "info") %}<li class="log-{{ e.level }}"><span class="tag">{{ e.stage }}</span> {{ e.message }}</li>{% endfor %}
+      </ul>
+    </div>
   </details>
   {% endfor %}
-  {% else %}<p class="sub">Nothing has run yet.</p>{% endif %}
+  {% else %}<p class="sub" style="padding: 0 20px 20px">Nothing has run yet.</p>{% endif %}
 </section>

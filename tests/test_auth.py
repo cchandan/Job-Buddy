@@ -61,9 +61,9 @@ def test_password_is_stored_as_a_hash(people):
 def test_admin_creates_an_account_and_the_password_works(people):
     admin = signed_in("dad")
     assert admin.post("/admin/accounts", {"name": "New Person", "username": "newbie", "role": "user"}).status_code == 303
-    page = admin.get("/admin").text
+    page = admin.get("/admin/people").text
     password = re.search(r'<code id="pw">([^<]+)</code>', page).group(1)
-    assert password not in admin.get("/admin").text  # shown once only
+    assert password not in admin.get("/admin/people").text  # shown once only
     assert Browser().login("newbie", password).status_code == 303
 
 
@@ -71,7 +71,7 @@ def test_new_password_stops_the_old_one_and_signs_them_out(people):
     wife = signed_in("wife")
     admin = signed_in("dad")
     admin.post(f"/admin/accounts/{people['wife']}/password")
-    new = re.search(r'<code id="pw">([^<]+)</code>', admin.get("/admin").text).group(1)
+    new = re.search(r'<code id="pw">([^<]+)</code>', admin.get("/admin/people").text).group(1)
     assert wife.get("/tracker").status_code == 303           # signed out everywhere
     assert Browser().login("wife").status_code == 401        # old password refused
     assert Browser().login("wife", new).status_code == 303

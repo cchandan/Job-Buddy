@@ -12,7 +12,7 @@ from test_sync import lab, set_profile  # noqa: F401  (a fake world of sources)
 
 def add(admin, name="Optiplex at home"):
     admin.post("/admin/refresher", {"name": name})
-    code = re.search(r"jbr1\.[A-Za-z0-9_-]+", admin.get("/admin/refresher").text).group(0)
+    code = re.search(r"jbr1\.[A-Za-z0-9_-]+", admin.get("/admin/refresh").text).group(0)
     _, token, _ = refreshers.parse_connection_code(code)
     return code, token
 
@@ -45,12 +45,12 @@ def test_a_bad_code_is_refused_in_plain_words(bad):
 def test_adding_a_refresher_shows_its_code_once_and_keeps_only_a_hash(people):
     dad = signed_in("dad")
     dad.post("/admin/refresher", {"name": "Optiplex at home"})
-    page = dad.get("/admin/refresher").text
+    page = dad.get("/admin/refresh").text
     code = re.search(r"jbr1\.[A-Za-z0-9_-]+", page).group(0)
     assert "Connection code for Optiplex at home" in page
     site, token, name = refreshers.parse_connection_code(code)
     assert site.startswith("http") and name == "Optiplex at home"
-    assert "jbr1." not in dad.get("/admin/refresher").text  # gone after one view
+    assert "jbr1." not in dad.get("/admin/refresh").text  # gone after one view
     row = refresher()
     assert row.token_hash == refreshers.hash_token(token) and token not in row.token_hash
     with db.SessionLocal() as s:
@@ -60,7 +60,7 @@ def test_adding_a_refresher_shows_its_code_once_and_keeps_only_a_hash(people):
 def test_a_name_is_needed(people):
     dad = signed_in("dad")
     dad.post("/admin/refresher", {"name": "  "})
-    assert "Give the computer a name" in dad.get("/admin/refresher").text
+    assert "Give the computer a name" in dad.get("/admin/refresh").text
     with db.SessionLocal() as s:
         assert s.query(db.Refresher).count() == 0
 
@@ -108,10 +108,10 @@ def test_the_morning_time_is_set_on_the_website(people, browser):
     assert checkin(browser, token).json()["config"]["schedule"] == {"time": "06:05", "enabled": True, "tz": "Europe/London"}
     dad.post("/admin/refresher/schedule", {"time": "06:05"})  # the box unticked
     assert checkin(browser, token).json()["config"]["schedule"]["enabled"] is False
-    assert "The morning refresh is off" in dad.get("/admin/refresher").text
+    assert "The morning refresh is off" in dad.get("/admin/refresh").text
     dad.post("/admin/refresher/schedule", {"time": "25:99", "enabled": "1"})
     assert checkin(browser, token).json()["config"]["schedule"]["time"] == "06:05"  # a bad time changes nothing
-    assert "Please give the time like 07:30" in dad.get("/admin/refresher").text
+    assert "Please give the time like 07:30" in dad.get("/admin/refresh").text
 
 
 # ---------- Run now and Stop ----------
@@ -122,7 +122,7 @@ def test_run_now_is_handed_over_once(people, browser):
     checkin(browser, token)
     dad.post("/admin/refresher/1/run")
     assert refresher().pending_command == "run_now"
-    assert "picks this up within a minute" in dad.get("/admin/refresher").text
+    assert "picks this up within a minute" in dad.get("/admin/refresh").text
     assert checkin(browser, token).json()["command"] == "run_now"
     assert checkin(browser, token).json()["command"] is None and refresher().pending_command == ""
 
@@ -130,12 +130,12 @@ def test_run_now_is_handed_over_once(people, browser):
 def test_run_now_needs_the_refresher_to_be_online_and_not_already_running(people, browser):
     dad = signed_in("dad")
     _, token = add(dad)
-    assert 'disabled' in re.search(r'<button class="btn btn--primary"[^>]*>Run now', dad.get("/admin/refresher").text).group(0)  # never heard from
+    assert 'disabled' in re.search(r'<button class="btn btn--primary"[^>]*>(?:<svg.*?</svg>)?Run now', dad.get("/admin/refresh").text).group(0)  # never heard from
     checkin(browser, token, state="running", phase="Fetching")
-    page = dad.get("/admin/refresher").text
+    page = dad.get("/admin/refresh").text
     assert "Refreshing now" in page and ">Stop</button>" in page and "Run now" not in page
     dad.post("/admin/refresher/1/run")
-    assert refresher().pending_command == "" and "already refreshing" in dad.get("/admin/refresher").text
+    assert refresher().pending_command == "" and "already refreshing" in dad.get("/admin/refresh").text
     dad.post("/admin/refresher/1/stop")
     assert checkin(browser, token, state="running").json()["command"] == "stop"
 
@@ -153,7 +153,7 @@ def test_only_admins_can_see_or_use_any_of_it(people):
     dad = signed_in("dad")
     add(dad)
     wife = signed_in("wife")
-    assert wife.get("/admin/refresher").status_code == 403
+    assert wife.get("/admin/refresh").status_code == 403
     for url in ("/admin/refresher", "/admin/refresher/schedule", "/admin/refresher/1/run", "/admin/refresher/1/stop", "/admin/refresher/1/remove"):
         assert wife.post(url, {"name": "x", "time": "07:30"}).status_code == 403, url
     assert refresher() is not None
@@ -176,11 +176,11 @@ def test_the_page_shows_status_progress_and_version(people, browser):
     _, token = add(dad)
     checkin(browser, token, version="0.9.0", state="running", phase="Fetching", percent=40, now="indeed: developer", found=12, new=3,
             last_run={"status": "complete", "at": "2026-10-12T07:30:00", "message": "5 new, 0 updated"})
-    page = dad.get("/admin/refresher").text
+    page = dad.get("/admin/refresh").text
     assert ">Online<" in page and "Refreshing now" in page and "Fetching · indeed: developer · 12 found, 3 new" in page
     assert "Complete · 5 new, 0 updated" in page and "Out of date: this site expects 1.0.0" in page
     assert "Every day at 07:30 UK time" in page
-    assert "Refresher" in dad.get("/admin").text  # the sidebar link
+    assert "/admin/refresh" in dad.get("/admin").text  # the sidebar link
 
 
 # ---------- alerts ----------

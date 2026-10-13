@@ -47,7 +47,7 @@ def parse_connection_code(code):
         data = json.loads(base64.urlsafe_b64decode(raw))
         return data["u"], data["t"], data.get("n") or "Refresher"
     except Exception:
-        raise ValueError("That connection code is damaged. Copy it again from Admin > Refresher.")
+        raise ValueError("That connection code is damaged. Copy it again from Admin > Refresh.")
 
 
 def by_token(database, token):

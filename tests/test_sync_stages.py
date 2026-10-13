@@ -108,23 +108,23 @@ def test_unticked_sources_are_never_searched(spy, lab):  # noqa: F811
     assert {site for site, _ in lab.calls} == {"indeed"}
     with db.SessionLocal() as s:
         text = "\n".join(e.message for e in s.query(db.RunEvent).order_by(db.RunEvent.id))
-    assert "Using 1 sources: indeed" in text and "Not using linkedin: turned off in Admin > Jobs sync" in text
+    assert "Using 1 sources: indeed" in text and "Not using linkedin: turned off in Admin > Refresh" in text
 
 
 def test_the_choice_survives_and_shows_on_the_page(lab):  # noqa: F811
     dad = signed_in("dad")
     dad.post("/admin/sync/sources", {"source": ["linkedin"]})
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert "Sources saved: LinkedIn." in page
     assert 'value="linkedin" checked' in page and 'value="indeed" checked' not in page
     assert "1 sources ready" in page
     dad.post("/admin/sync/sources", {"source": ["indeed", "linkedin"]})
-    assert "2 sources ready" in dad.get("/admin/sync").text
+    assert "2 sources ready" in dad.get("/admin/refresh").text
 
 
 def test_a_source_that_cannot_run_here_is_greyed_out_and_keeps_its_setting(lab, monkeypatch):  # noqa: F811
     dad = signed_in("dad")
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert "not available: no key in .env (optional)" in page  # reed and adzuna have no keys
     import re
     assert re.search(r'value="reed"[^>]*disabled', page) and not re.search(r'value="reed"[^>]*checked', page)
@@ -141,12 +141,12 @@ def test_with_every_source_unticked_a_scrape_is_refused_clearly(lab, monkeypatch
     monkeypatch.setattr(ingest, "start", lambda person_id, stages=ingest.STAGES: started.append(stages) or True)
     dad = signed_in("dad")
     dad.post("/admin/sync/sources", {})
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     assert "none are ticked" in page and "Every source is turned off" in page
     dad.post("/admin/sync/run/scrape")
     dad.post("/admin/sync/refresh")
     assert started == []
-    assert "Every source is turned off" in dad.get("/admin/sync").text
+    assert "Every source is turned off" in dad.get("/admin/refresh").text
 
 
 # ---------- the buttons ----------
@@ -156,7 +156,7 @@ def test_each_stage_has_its_own_button_and_starts_only_that_stage(lab, monkeypat
     monkeypatch.setattr(ingest, "start", lambda person_id, stages=ingest.STAGES: started.append(tuple(stages)) or True)
     monkeypatch.setattr(push, "configured", lambda: True)
     dad = signed_in("dad")
-    page = dad.get("/admin/sync").text
+    page = dad.get("/admin/refresh").text
     for label in ("Run scrape only", "Run check liveness only", "Run publish only", "Run all steps"):
         assert label in page
     for stage in ingest.STAGES:
@@ -170,7 +170,7 @@ def test_publish_alone_is_refused_when_publishing_is_not_set_up_but_a_full_run_j
     monkeypatch.setattr(ingest, "start", lambda person_id, stages=ingest.STAGES: started.append(tuple(stages)) or True)
     monkeypatch.setattr(push, "configured", lambda: False)
     dad = signed_in("dad")
-    assert "INGEST_URL and INGEST_TOKEN" in dad.get("/admin/sync").text
+    assert "INGEST_URL and INGEST_TOKEN" in dad.get("/admin/refresh").text
     dad.post("/admin/sync/run/publish")
     assert started == []
     dad.post("/admin/sync/refresh")
@@ -182,8 +182,8 @@ def test_nothing_can_run_on_the_live_site(lab, monkeypatch):  # noqa: F811
     monkeypatch.setattr(ingest, "start", lambda person_id, stages=ingest.STAGES: started.append(stages) or True)
     monkeypatch.setattr(sources, "jobspy_available", lambda: False)
     dad = signed_in("dad")
-    page = dad.get("/admin/sync").text
-    assert "Refreshing only works when Job Buddy is running on your laptop" in page and 'aria-label="Sources"' not in page
+    page = dad.get("/admin/refresh").text
+    assert "Refreshing only works when Job Buddy is running on your laptop" in page
     for stage in ingest.STAGES:
         dad.post(f"/admin/sync/run/{stage}")
     assert started == []
@@ -193,7 +193,7 @@ def test_a_second_run_while_one_is_going_is_refused(lab, monkeypatch):  # noqa: 
     monkeypatch.setattr(ingest, "start", lambda person_id, stages=ingest.STAGES: False)
     dad = signed_in("dad")
     dad.post("/admin/sync/run/scrape")
-    assert "A refresh is already running" in dad.get("/admin/sync").text
+    assert "A refresh is already running" in dad.get("/admin/refresh").text
 
 
 def test_only_admins_can_use_them_and_unknown_steps_are_404(lab):  # noqa: F811
@@ -205,10 +205,10 @@ def test_only_admins_can_use_them_and_unknown_steps_are_404(lab):  # noqa: F811
 
 def test_the_log_says_which_steps_a_partial_run_did(spy):
     run(("liveness",))
-    page = signed_in("dad").get("/admin/sync").text
+    page = signed_in("dad").get("/admin/refresh").text
     assert "liveness only" in page and "3 checked" in page
     run(("scrape",))
-    assert "scrape only" in signed_in("dad").get("/admin/sync").text
+    assert "scrape only" in signed_in("dad").get("/admin/refresh").text
 
 
 def test_the_running_panel_only_lists_the_steps_in_play(lab, monkeypatch):  # noqa: F811

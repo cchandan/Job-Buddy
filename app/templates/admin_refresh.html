@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% block title %}Refresh{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1 class="t">Refresh</h1>
+    <p class="sub">Finds new jobs, closes old ones and publishes to the Job Board, every morning.</p>
+  </div>
+  {% if can_fetch %}<span class="badge b-ok">Running on your laptop · {{ picked|length }} sources ready</span>
+  {% else %}<span class="badge b-none">Live site · refreshing not available here</span>{% endif %}
+</div>
+
+{% if new_refresher %}
+<section class="secret" aria-label="Connection code" role="status">
+  <strong>Connection code for {{ new_refresher.name }}</strong>
+  <div><code id="code" style="font-size: 14px; word-break: break-all">{{ new_refresher.code }}</code> <button type="button" class="btn" id="copy">Copy</button></div>
+  <span>Give this to whoever is setting up the computer. It is the only time it is shown. If it is lost, remove the computer below and add it again.</span>
+</section>
+{% endif %}
+
+{% for c in cards %}
+{% set r = c.row %}{% set st = c.status %}{% set last = st.last_run or {} %}
+<section class="panel panel--pad stack-lg" aria-label="{{ r.name }}">
+  <div class="rowx" style="gap: 14px">
+    <span class="ico ico--blue ico--lg">{{ icon("computer", 22) }}</span>
+    <div class="grow"><h2 class="t2" style="font-size: 20px">{{ r.name }}</h2><div class="by">Version {{ r.version or "?" }}{% if r.version and r.version != expected %} · <span class="badge b-flag">Out of date: this site expects {{ expected }}</span>{% elif r.version %}, up to date{% endif %}{% if st.host %} · {{ st.host }}{% endif %}</div></div>
+    {% if r.state == "running" %}<span class="badge b-new">Refreshing now</span>{% endif %}
+    {% if c.health[0] == "online" and last.status == "failed" %}<span class="badge b-rejected">Last refresh failed</span>
+    {% elif c.health[0] == "online" %}<span class="badge b-ok">Online</span>
+    {% elif c.health[0] == "quiet" %}<span class="badge b-closing">{{ c.health[1] }}</span>
+    {% elif c.health[0] == "never" %}<span class="badge b-none">{{ c.health[1] }}</span>
+    {% else %}<span class="badge b-rejected">{{ c.health[1] }}</span>{% endif %}
+    {% if r.state == "running" %}
+    <form method="post" action="/admin/refresher/{{ r.id }}/stop">{{ csrf_field() }}<button class="btn">Stop</button></form>
+    {% else %}
+    <form method="post" action="/admin/refresher/{{ r.id }}/run">{{ csrf_field() }}<button class="btn btn--primary" {{ 'disabled' if c.health[0] != 'online' }}>{{ icon("refresh", 18) }}Run now</button></form>
+    {% endif %}
+  </div>
+  {% if r.pending_command %}<p class="by">Waiting for it to pick up “{{ 'refresh now' if r.pending_command == 'run_now' else 'stop' }}”. This takes up to a minute.</p>{% endif %}
+  {% if r.state == "running" %}
+  <div class="livebox" role="status" aria-live="polite">
+    <div class="bar" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ st.percent or 0 }}"><span style="width: {{ [st.percent or 0, 4]|max }}%"></span></div>
+    <div class="by">{{ st.phase or "Working" }}{% if st.now %} · {{ st.now }}{% endif %}{% if st.found %} · {{ st.found }} found, {{ st.new or 0 }} new{% endif %}</div>
+  </div>
+  {% endif %}
+  {% if last.status == "failed" %}
+  <div class="alertbox" role="alert"><div class="grow"><strong>The last refresh failed.</strong>{% if last.message %} {{ last.message }}{% endif %}</div><a class="lnk minh" href="#history">See the log</a></div>
+  {% endif %}
+  <div class="facts">
+    <div><div class="fact-k">Last heard from</div><div class="fact-v">{{ r.last_seen|when if r.last_seen else "Never" }}</div></div>
+    <div><div class="fact-k">Last refresh</div><div class="fact-v">{% if last %}{{ last.status|capitalize }}{% if last.message and last.status != "failed" %} · {{ last.message }}{% endif %}{% if last.at %} <span class="by">({{ last.at[:16]|replace("T", " ") }} UTC)</span>{% endif %}{% else %}Nothing yet{% endif %}</div></div>
+    <div><div class="fact-k">Next refresh</div><div class="fact-v">{% if not schedule.enabled %}Off (use Run now){% elif st.next_run_at %}{{ st.next_run_at[:16]|replace("T", " ") }} UTC{% else %}Every day at {{ schedule.time }} UK time{% endif %}</div></div>
+  </div>
+</section>
+{% else %}
+<section class="panel panel--pad empty-panel"><h2 class="t2">No refresher yet</h2><p class="sub">Add the home computer below, then follow the README that comes with the refresher to set it up.</p><a class="btn btn--primary" href="#computers">Add a computer</a></section>
+{% endfor %}
+
+{% if can_fetch %}
+<section class="panel panel--pad stack-lg" aria-label="This computer">
+  {% if state.running %}
+  <div id="live" class="stack" role="status" aria-live="polite">
+    <div class="rowx" style="justify-content: space-between; align-items: baseline">
+      <h2 class="t2">Refreshing jobs on this computer…</h2><span class="by" id="lv-eta">Estimating…</span>
+    </div>
+    <div class="rowx" id="lv-phases"></div>
+    <div class="bar" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="lv-bar" style="width: 4%; transition: width .6s ease"></span></div>
+    <div class="rowx" style="justify-content: space-between"><span id="lv-now"><strong>Starting…</strong></span><span class="by" id="lv-counts"></span></div>
+    <div id="lv-sources" class="stack"></div>
+    <div id="lv-notes" class="stack"></div>
+    <div class="rowx" style="justify-content: space-between; gap: 12px">
+      <span class="by">Stopping is safe: everything found so far is already saved, and the next refresh carries on.</span>
+      <form method="post" action="/admin/sync/stop">{{ csrf_field() }}<button class="btn">Stop</button></form>
+    </div>
+    <noscript><p class="by">Reload this page to see progress.</p></noscript>
+  </div>
+  {% else %}
+  <div class="rowx" style="justify-content: space-between; gap: 14px">
+    <div class="grow"><h2 class="t2">Refresh jobs</h2>
+      <p class="sub">{% if state.phase %}{{ state.phase }}. {{ state.message }}{% else %}Running on this computer. Run every step in turn, or pick just one.{% endif %}</p></div>
+    <form method="post" action="/admin/sync/refresh">{{ csrf_field() }}<button class="btn btn--primary" {{ 'disabled' if not stages.scrape[0] }}>Run all steps</button></form>
+  </div>
+  <details class="more">
+    <summary class="lnk">Run one step at a time</summary>
+    <div class="steps3">
+      {% for key, num, title, text in [("scrape", "1", "Scrape", "Search the ticked sources and tag only what is new. Saved here as it goes."), ("liveness", "2", "Check liveness", "Look at the pages of older jobs and close the ones that are gone."), ("publish", "3", "Publish", "Send new, changed and closed jobs to the live site.")] %}
+      <div class="stepcard">
+        <div><span class="by">Step {{ num }}</span><h3 class="t3">{{ title }}</h3><p class="by">{{ text }}</p></div>
+        <form method="post" action="/admin/sync/run/{{ key }}">{{ csrf_field() }}<button class="btn" {{ 'disabled' if not stages[key][0] }}>Run {{ title|lower }} only</button></form>
+        {% if not stages[key][0] %}<p class="by">{{ stages[key][1] }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+  {% for note in notes %}<div class="notice"><span>{{ note }}</span></div>{% endfor %}
+  <p class="by">Tagging with: {{ backends|join(", ") if backends else "keywords only (no AI tool found)" }}. Refreshing never changes anyone's Tracker, statuses, deadlines they set, or CVs.</p>
+</section>
+{% else %}
+<p class="by">Refreshing only works when Job Buddy is running on your laptop with the fetching tools installed. On this site, the home computer above does the refreshing.</p>
+{% for note in notes %}<div class="notice"><span>{{ note }}</span></div>{% endfor %}
+{% endif %}
+
+<div class="split split--even">
+  <section class="panel panel--pad stack" aria-label="Schedule">
+    <h2 class="t2">Morning refresh</h2>
+    <form method="post" action="/admin/refresher/schedule" class="stack">
+      {{ csrf_field() }}
+      <label class="switch"><span>Refresh every morning</span><input type="checkbox" name="enabled" value="1" role="switch" {{ 'checked' if schedule.enabled }}><i aria-hidden="true"></i></label>
+      <div class="rowx" style="align-items: flex-end">
+        <div class="field" style="flex: 0 0 120px"><label class="lab" for="when">Time (UK time)</label><input id="when" name="time" class="input" value="{{ schedule.time }}" pattern="[0-2]?[0-9]:[0-5][0-9]" inputmode="numeric" required></div>
+        <button class="btn">Save</button>
+      </div>
+      <p class="by">If the computer was off at that time, it refreshes as soon as it is back on.</p>
+    </form>
+  </section>
+
+  <section class="panel panel--pad stack" aria-label="Sources">
+    <div class="rowx" style="justify-content: space-between; align-items: baseline"><h2 class="t2">Sources</h2><span class="by">Tick the sites to search. Unticked ones are skipped.</span></div>
+    <form method="post" action="/admin/sync/sources" class="stack">
+      {{ csrf_field() }}
+      <div class="rowx" style="gap: 8px">
+        {% for r in source_rows %}
+        <label class="pillcheck {{ 'is-off' if r.reason }}"><input type="checkbox" name="source" value="{{ r.name }}" {{ 'checked' if r.enabled and not r.reason }} {{ 'disabled' if r.reason }}><span>{{ icon("check", 14) }}{{ r.label }}{% if r.reason %} · not available: {{ r.reason }}{% endif %}</span></label>
+        {% endfor %}
+      </div>
+      <div><button class="btn">Save sources</button></div>
+    </form>
+    <details class="more ruled">
+      <summary class="lnk">Tagging tools <span class="by">· {{ backends|join(", ") if backends else "keywords only" }}</span></summary>
+      <form method="post" action="/admin/sync/tagging" class="stack">
+        {{ csrf_field() }}
+        <p class="by">The refresh tries these in order and uses the first that works; if it runs out of credit it moves to the next. Choose none for keywords only.</p>
+        <div class="rowx">
+          {% for i in range(3) %}
+          <div class="field"><label class="lab" for="pick{{ i }}">{{ ["First choice", "Second choice", "Third choice"][i] }}</label>
+            <select id="pick{{ i }}" name="pick{{ i }}" class="input"><option value="">None</option>
+              {% for value, label, ready in choices %}<option value="{{ value }}" {{ 'selected' if order|length > i and order[i] == value }}>{{ label }}{{ "" if ready else " (not set up)" }}</option>{% endfor %}
+            </select></div>
+          {% endfor %}
+        </div>
+        <div><button class="btn">Save tagging order</button></div>
+      </form>
+    </details>
+  </section>
+</div>
+
+{% include "_runs.html" %}
+
+<section class="panel panel--pad stack" id="computers" aria-label="Computers">
+  <h2 class="t2">Computers</h2>
+  {% for c in cards %}
+  <div class="rowx" style="justify-content: space-between">
+    <div><div class="jt">{{ c.row.name }}</div><div class="by">Added {{ c.row.created_at|dmy }} · {{ c.health[1]|lower }}</div></div>
+    <form method="post" action="/admin/refresher/{{ c.row.id }}/remove" data-confirm="Remove {{ c.row.name }}? It stops being able to report or publish. You can add it again with a new code.">{{ csrf_field() }}<button class="btn btn--danger">Remove</button></form>
+  </div>
+  {% endfor %}
+  <details class="more ruled" {% if not cards %}open{% endif %}>
+    <summary class="lnk">{{ icon("plus", 16) }} Add a computer</summary>
+    <form method="post" action="/admin/refresher" class="stack">
+      {{ csrf_field() }}
+      <div class="field"><label class="lab" for="rname">Name of the computer</label><input id="rname" name="name" class="input" maxlength="60" placeholder="Optiplex at home" required></div>
+      <div><button class="btn btn--primary">Add and get a connection code</button></div>
+      <p class="by">The code is shown once. It lets that one computer report here and publish jobs, and it can be removed at any time.</p>
+    </form>
+  </details>
+</section>
+{% endblock %}
+{% block scripts %}
+{% if new_refresher %}
+<script>
+  document.getElementById("copy").addEventListener("click", function () {
+    var b = this;
+    navigator.clipboard.writeText(document.getElementById("code").textContent).then(function () { b.textContent = "Copied"; });
+  });
+</script>
+{% endif %}
+{% if state.running and can_fetch %}
+<script>
+(function () {
+  var NAMES = {indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", reed: "Reed", adzuna: "Adzuna"};
+  var PHASES = [["Planning", "Planning", "scrape"], ["Fetching", "Searching", "scrape"], ["Checking old jobs", "Checking old jobs", "liveness"], ["Publishing", "Publishing", "publish"]];
+  var STATUS = {waiting: "Waiting", running: "Searching now", done: "Done", failed: "Skipped (kept failing)"};
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, text, cls, style) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; if (style) e.style.cssText = style; return e; }
+  function eta(s) {
+    if (s.eta_seconds == null) return "Estimating…";
+    var m = Math.round(s.eta_seconds / 60);
+    return m < 1 ? "Under a minute left" : "About " + m + " min left (searches only)";
+  }
+  function render(s) {
+    $("lv-eta").textContent = s.stopping ? "Stopping after this step…" : eta(s);
+    $("lv-bar").style.width = Math.max(4, s.percent) + "%";
+    $("lv-bar").parentNode.setAttribute("aria-valuenow", s.percent);
+    var ph = $("lv-phases"); ph.textContent = "";
+    PHASES.forEach(function (p) { if ((s.stages || []).indexOf(p[2]) >= 0) ph.appendChild(el("span", p[1], p[0] === s.phase ? "badge b-ok" : "badge b-none")); });
+    $("lv-now").textContent = ""; $("lv-now").appendChild(el("strong", s.now ? "Now: " + s.now : (s.phase || "Starting") + "…"));
+    $("lv-counts").textContent = s.found + " jobs found · " + s.new + " new · " + s.seen + " already known";
+    var box = $("lv-sources"); box.textContent = "";
+    Object.keys(s.plan).forEach(function (name) {
+      var c = s.plan[name], pct = c.total ? Math.round(100 * c.done / c.total) : 100;
+      var row = el("div", null, "stack", "gap: 4px");
+      var top = el("div", null, "rowx", "justify-content: space-between");
+      top.appendChild(el("strong", NAMES[name] || name));
+      top.appendChild(el("span", (STATUS[c.status] || c.status) + " · " + c.done + " of " + c.total + " searches · " + c.found + " jobs", "by"));
+      var bar = el("div", null, "bar"); bar.appendChild(el("span", null, null, "width:" + Math.max(pct, c.status === "running" ? 4 : 0) + "%; transition: width .6s ease"));
+      row.appendChild(top); row.appendChild(bar); box.appendChild(row);
+    });
+    var notes = $("lv-notes"); notes.textContent = "";
+    s.notes.forEach(function (n) { notes.appendChild(el("div", n, "notice")); });
+  }
+  function tick() {
+    fetch("/admin/sync/status", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (s) {
+      if (!s.running) { location.reload(); return; }
+      render(s); setTimeout(tick, 2000);
+    }).catch(function () { setTimeout(tick, 4000); });
+  }
+  render({{ prog|tojson }});
+  setTimeout(tick, 1500);
+})();
+</script>
+{% endif %}
+{% endblock %}

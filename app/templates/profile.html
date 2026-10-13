@@ -4,7 +4,7 @@
 {% block content %}
 <div>
   <h1 class="t">{{ (owner.first_name ~ "'s Profile") if readonly else "Profile" }}</h1>
-  <p class="sub">The core CV is the base for every tailored CV.</p>
+  <p class="sub">Keep your CV here so it is ready whenever you apply.</p>
 </div>
 
 <section class="card rowx" style="gap: 16px">
@@ -28,7 +28,7 @@
     <div class="rowx">
       <a class="btn" href="{{ ('/admin/users/%s/cv/download' % owner.id) if readonly else '/profile/cv/download' }}">Download</a>
       {% if not readonly %}
-      <form method="post" action="/profile/cv/delete" data-confirm="Delete your core CV? Tailored CVs you already made are kept.">{{ csrf_field() }}<button class="btn btn--danger">Delete</button></form>
+      <form method="post" action="/profile/cv/delete" data-confirm="Delete your core CV?">{{ csrf_field() }}<button class="btn btn--danger">Delete</button></form>
       {% endif %}
     </div>
   </div>
@@ -46,7 +46,6 @@
       <div class="field"><label class="lab" for="cv_text">CV text</label><textarea id="cv_text" name="cv_text" class="input" style="min-height: 220px" maxlength="30000"></textarea></div>
     </details>
     <div><button class="btn btn--primary">{{ "Replace CV" if cv else "Save CV" }}</button></div>
-    {% if cv %}<p class="by">Replacing your core CV does not change the tailored CVs you have already made.</p>{% endif %}
   </form>
   {% endif %}
 </section>
@@ -54,7 +53,7 @@
 {% if not readonly %}
 <section class="info stack" aria-label="Privacy">
   <strong>What happens to your CV</strong>
-  <span>It is stored in Job Buddy so it can be tailored for each job. It is sent to the AI service when you create a tailored CV. The admins can see it. You can delete it at any time.</span>
+  <span>It is stored in Job Buddy. The admins can see it. You can delete it at any time.</span>
 </section>
 
 <section class="card stack" aria-label="Change password">

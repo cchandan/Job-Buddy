@@ -1,4 +1,4 @@
-"""Admin: Admin home, accounts, view as user, assign, review CVs, jobs sync. Every route here needs an admin."""
+"""Admin: Admin home, accounts, view as user, assign, jobs sync. Every route here needs an admin."""
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
@@ -67,7 +67,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
     elif confirm.strip().lower() != account.username:
         web.flash(request, f"Nothing was removed. To remove {account.name}, type their username exactly.", "bad")
     else:
-        # Remove the person and everything that is theirs: Tracker, core CV, tailored CVs.
+        # Remove the person and everything that is theirs: Tracker and core CV.
         for entry in database.query(db.TrackerEntry).filter(db.TrackerEntry.person_id == account.id).all():
             database.delete(entry)
         cv = database.get(db.CV, account.id)
@@ -75,7 +75,7 @@ def remove_account(account_id: int, request: Request, database=Depends(auth.get_
             database.delete(cv)
         database.query(db.PushSubscription).filter(db.PushSubscription.person_id == account.id).delete()
         database.flush()
-        for model, column in ((db.TrackerEntry, "added_by_id"), (db.TailoredCV, "reviewer_id"), (db.SyncRun, "person_id")):
+        for model, column in ((db.TrackerEntry, "added_by_id"), (db.SyncRun, "person_id")):
             database.query(model).filter(getattr(model, column) == account.id).update({column: None})
         database.delete(account)
         database.commit()
@@ -190,49 +190,6 @@ async def assign_from_board(request: Request, database=Depends(auth.get_db), per
     except ValueError:
         raise HTTPException(status_code=404, detail="Please choose who to assign the job to.")
     return await assign(user_id, request, database, person)
-
-
-# ---------- review CVs ----------
-
-@router.get("/review")
-def review_list(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
-    return web.page(request, "admin_review.html", person, "review", queue=summary.review_queue(database, web.today()))
-
-
-def _review_item(database, entry_id):
-    entry = database.get(db.TrackerEntry, entry_id)
-    if entry is None or entry.tailored is None:
-        raise HTTPException(status_code=404, detail="We couldn't find that CV. It may have been deleted.")
-    return entry
-
-
-@router.get("/review/{entry_id}")
-def review_one(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
-    entry = _review_item(database, entry_id)
-    return web.page(request, "admin_review_one.html", person, "review", v=summary.entry_view(entry, web.today()),
-                    owner=entry.person, core=database.get(db.CV, entry.person_id), tailored=entry.tailored)
-
-
-@router.post("/review/{entry_id}")
-def review_decide(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin),
-                  decision: str = Form(""), comment: str = Form("")):
-    entry = _review_item(database, entry_id)
-    cv, comment = entry.tailored, comment.strip()[:2000]
-    if cv.status != "in_review":
-        web.flash(request, "That CV is no longer waiting for review.", "bad")
-        return web.redirect("/admin/review")
-    if decision == "changes" and not comment:
-        web.flash(request, "Please say what should change, so they know what to do.", "bad")
-        return web.redirect(f"/admin/review/{entry.id}")
-    if decision not in ("approve", "changes"):
-        return web.redirect(f"/admin/review/{entry.id}")
-    cv.status = "approved" if decision == "approve" else "changes_requested"
-    cv.reviewer_id, cv.review_comment, cv.reviewed_at, cv.review_seen = person.id, comment, db.utcnow(), False
-    database.commit()
-    notify.notify(entry.person_id, "Your CV was approved" if decision == "approve" else "Changes requested on your CV",
-                  db.entry_job(entry).title, f"/tracker/{entry.id}/cv", tag=f"review-{entry.id}")
-    web.flash(request, f"{'Approved' if decision == 'approve' else 'Changes requested'}. {entry.person.first_name} will see it on their Home page.")
-    return web.redirect("/admin/review")
 
 
 # ---------- jobs sync ----------

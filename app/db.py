@@ -38,7 +38,6 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 STATUSES = ["shortlisted", "applied", "interviewing", "offer", "rejected", "withdrawn"]
-CV_STATUSES = ["draft", "in_review", "approved", "changes_requested"]
 SOURCES = ["shortlisted", "assigned", "link", "manual"]
 
 
@@ -156,33 +155,16 @@ class TrackerEntry(Base):
     job = relationship(Job)
     person = relationship(Person, foreign_keys=[person_id])
     added_by = relationship(Person, foreign_keys=[added_by_id])
-    tailored = relationship("TailoredCV", uselist=False, back_populates="entry", cascade="all, delete-orphan")
 
 
 class CV(Base):
-    """A person's core CV: the base for every tailored CV. Lives only in the database."""
+    """A person's core CV. Lives only in the database."""
     __tablename__ = "cvs"
     person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), primary_key=True)
     filename = Column(String(200), default="")
     data = Column(LargeBinary)  # the original PDF; empty when the text was pasted
     text = Column(Text, nullable=False)
     uploaded_at = Column(DateTime, default=utcnow)
-
-
-class TailoredCV(Base):
-    __tablename__ = "tailored_cvs"
-    entry_id = Column(Integer, ForeignKey("tracker_entries.id", ondelete="CASCADE"), primary_key=True)
-    text = Column(Text, nullable=False, default="")
-    status = Column(String(20), nullable=False, default="draft")
-    reviewer_id = Column(Integer, ForeignKey("people.id", ondelete="SET NULL"))
-    review_comment = Column(Text, default="")
-    reviewed_at = Column(DateTime)
-    review_seen = Column(Boolean, nullable=False, default=True)  # False until the owner sees the outcome
-    sent_at = Column(DateTime)
-    updated_at = Column(DateTime, default=utcnow)
-
-    entry = relationship(TrackerEntry, back_populates="tailored")
-    reviewer = relationship(Person)
 
 
 class SyncRun(Base):

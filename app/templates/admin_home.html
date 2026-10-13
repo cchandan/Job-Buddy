@@ -8,7 +8,6 @@
     <p class="sub">{{ line }}</p>
   </div>
   <div class="rowx">
-    {% if queue %}<a class="btn" href="/admin/review">Review {{ queue|length }} CV{{ '' if queue|length == 1 else 's' }}</a>{% endif %}
     <a class="btn btn--primary" href="/admin/sync">Refresh jobs</a>
   </div>
 </div>
@@ -22,19 +21,13 @@
 </section>
 {% endif %}
 
-{% if queue or stale or urgent or notes %}
+{% if stale or urgent or notes %}
 <section class="card stack" aria-label="Needs you">
   <h2 class="t2">Needs you</h2>
   {% if stale %}
   <div class="notice"><span>{% if last_sync %}The Job Board was last updated {{ last_sync.at|dmy }}{% if last_sync.person %} by {{ last_sync.person.first_name }}{% endif %}, {{ board_age }} days ago.{% else %}The Job Board has never been synced. It shows the {{ job_count }} starter jobs.{% endif %}</span><a class="btn btn--primary" href="/admin/sync">Refresh jobs</a></div>
   {% endif %}
   {% for note in notes %}<div class="notice"><span>{{ note }}</span><a class="btn" href="/admin/sync">See the log</a></div>{% endfor %}
-  {% for item in queue %}
-  <div class="next-row">
-    <div class="grow"><div class="by">CV to review · sent {{ item.cv.sent_at|dmy }}</div><div class="jt">{{ item.entry.person.first_name }} · {{ item.job.title }}</div><div class="meta">{{ item.job.company }}</div></div>
-    <div class="rowx">{{ chip(item.chip) }}<a class="btn btn--primary" href="/admin/review/{{ item.entry.id }}">Review</a></div>
-  </div>
-  {% endfor %}
   {% for item in urgent %}
   <div class="next-row">
     <div class="grow"><div class="by">Deadline close, not applied yet</div><div class="jt">{{ item.user.first_name }} · {{ item.job.title }}</div><div class="meta">{{ item.job.company }}</div></div>
@@ -55,7 +48,6 @@
     </div>
     <div class="rowx">
       {% for s in STATUSES if card.counts[s] %}<span class="badge {{ {'shortlisted': 'b-short', 'applied': 'b-applied', 'interviewing': 'b-interview', 'offer': 'b-offer', 'rejected': 'b-rejected', 'withdrawn': 'b-withdrawn'}[s] }}">{{ STATUS_LABELS[s] }} {{ card.counts[s] }}</span>{% else %}<span class="sub">Nothing in their Tracker yet</span>{% endfor %}
-      {% if card.waiting %}<span class="badge b-review">CVs to review {{ card.waiting }}</span>{% endif %}
     </div>
     <div class="tight">
       <div class="lab">Next deadlines</div>

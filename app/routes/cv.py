@@ -1,8 +1,8 @@
-"""Profile, the core CV, and tailored CVs."""
+"""Profile and the core CV."""
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
-from .. import ai, auth, cv_pdf, db, notify, summary, tailoring, web
+from .. import auth, cv_pdf, db, web
 from .tracker import users_only
 
 router = APIRouter()
@@ -66,103 +66,5 @@ def delete_cv(request: Request, database=Depends(auth.get_db), person=Depends(us
     if row is not None:
         database.delete(row)
         database.commit()
-        web.flash(request, "Your core CV has been deleted. Tailored CVs you already made are kept.")
+        web.flash(request, "Your core CV has been deleted.")
     return web.redirect("/profile")
-
-
-# ---------- tailored CVs ----------
-
-def blocked_reason(core, job):
-    if core is None:
-        return "cv"
-    if len((job.description or "").strip()) < 80:
-        return "description"
-    return ""
-
-
-@router.get("/tracker/{entry_id}/cv")
-def tailored_page(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only)):
-    entry = auth.own_entry(database, person, entry_id)
-    v = summary.entry_view(entry, web.today())
-    core = database.get(db.CV, person.id)
-    response = web.page(request, "tailored.html", person, "tracker", v=v, core=core, tailored=entry.tailored,
-                        blocked=blocked_reason(core, v["job"]), ai_ready=ai.available())
-    if entry.tailored is not None and not entry.tailored.review_seen:
-        entry.tailored.review_seen = True  # the review outcome has now been seen
-        database.commit()
-    return response
-
-
-@router.post("/tracker/{entry_id}/cv/create")
-def create_tailored(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only)):
-    """Create or regenerate. Regenerating replaces the text, so the page asks first."""
-    entry = auth.own_entry(database, person, entry_id)
-    job, core = db.entry_job(entry), database.get(db.CV, person.id)
-    if blocked_reason(core, job):
-        return web.redirect(f"/tracker/{entry.id}/cv")
-    try:
-        text = tailoring.tailor(core.text, job)
-    except ai.AILimitReached:
-        web.flash(request, "Today's limit for AI help has been reached. Please try again tomorrow.", "bad")
-        return web.redirect(f"/tracker/{entry.id}/cv")
-    except ai.AIUnavailable:
-        web.flash(request, "The AI service isn't available right now. Try again in a few minutes.", "bad")
-        return web.redirect(f"/tracker/{entry.id}/cv")
-    row = entry.tailored
-    if row is None:
-        row = db.TailoredCV(entry_id=entry.id)
-        database.add(row)
-    row.text, row.status, row.updated_at, row.review_seen = text[:MAX_CV_TEXT], "draft", db.utcnow(), True
-    database.commit()
-    web.flash(request, "Your tailored CV is ready. Check every line before you use it.")
-    return web.redirect(f"/tracker/{entry.id}/cv")
-
-
-def _tailored(database, person, entry_id):
-    entry = auth.own_entry(database, person, entry_id)
-    if entry.tailored is None:
-        raise HTTPException(status_code=404, detail="There is no tailored CV for this job yet.")
-    return entry, entry.tailored
-
-
-@router.post("/tracker/{entry_id}/cv/save")
-def save_tailored(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only),
-                  text: str = Form(""), then: str = Form("")):
-    entry, row = _tailored(database, person, entry_id)
-    text = text.replace("\r\n", "\n").strip()[:MAX_CV_TEXT]
-    if len(text) < MIN_CV_TEXT:
-        web.flash(request, "The CV can't be empty. Nothing was saved.", "bad")
-        return web.redirect(f"/tracker/{entry.id}/cv")
-    changed = text != row.text
-    row.text, row.updated_at = text, db.utcnow()
-    if changed and row.status in ("approved", "in_review"):
-        row.status = "draft"  # an edited CV needs review again
-    if then == "send":
-        row.status, row.sent_at, row.review_comment, row.review_seen = "in_review", db.utcnow(), "", True
-        web.flash(request, "Sent for review. You'll see the outcome on your Home page.")
-    else:
-        web.flash(request, "Saved.")
-    database.commit()
-    if then == "send":
-        for admin in database.query(db.Person).filter(db.Person.role == "admin"):
-            notify.notify(admin.id, "CV to review", f"{person.first_name} sent a CV for {db.entry_job(entry).title}",
-                          f"/admin/review/{entry.id}", tag=f"review-{entry.id}")
-    return web.redirect(f"/tracker/{entry.id}/cv")
-
-
-@router.post("/tracker/{entry_id}/cv/delete")
-def delete_tailored(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(users_only)):
-    entry, row = _tailored(database, person, entry_id)
-    database.delete(row)
-    database.commit()
-    web.flash(request, "The tailored CV has been deleted.")
-    return web.redirect(f"/tracker/{entry.id}")
-
-
-@router.get("/tracker/{entry_id}/cv/print")
-def print_tailored(entry_id: int, request: Request, database=Depends(auth.get_db), person=Depends(auth.current_person)):
-    """A clean page to save as PDF from the browser. Admins may open it for review."""
-    entry = auth.own_entry(database, person, entry_id, allow_admin=True)
-    if entry.tailored is None:
-        raise HTTPException(status_code=404, detail="There is no tailored CV for this job yet.")
-    return web.templates.TemplateResponse(request, "cv_print.html", {"text": entry.tailored.text, "job": db.entry_job(entry)})

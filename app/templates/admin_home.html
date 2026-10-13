@@ -21,9 +21,18 @@
 </section>
 {% endif %}
 
-{% if stale or urgent or notes %}
+{% if signups or stale or urgent or notes %}
 <section class="card stack" aria-label="Needs you">
   <h2 class="t2">Needs you</h2>
+  {% for r in signups %}
+  <div class="next-row">
+    <div class="grow"><div class="by">Sign-up request · {{ r.created_at|when }}</div><div class="jt">{{ r.name }}</div><div class="meta">Wants the username <code>{{ r.username }}</code></div></div>
+    <div class="rowx">
+      <form method="post" action="/admin/signups/{{ r.id }}/approve">{{ csrf_field() }}<button class="btn btn--primary">Approve</button></form>
+      <form method="post" action="/admin/signups/{{ r.id }}/reject" data-confirm="Decline {{ r.name }}'s request? Nothing is created.">{{ csrf_field() }}<button class="btn btn--danger">Decline</button></form>
+    </div>
+  </div>
+  {% endfor %}
   {% if stale %}
   <div class="notice"><span>{% if last_sync %}The Job Board was last updated {{ last_sync.at|dmy }}{% if last_sync.person %} by {{ last_sync.person.first_name }}{% endif %}, {{ board_age }} days ago.{% else %}The Job Board has never been synced. It shows the {{ job_count }} starter jobs.{% endif %}</span><a class="btn btn--primary" href="/admin/sync">Refresh jobs</a></div>
   {% endif %}
@@ -83,6 +92,12 @@
       <div><button class="btn btn--primary">Create account</button></div>
       <p class="by">Job Buddy makes the password and shows it to you once, to pass on.</p>
     </form>
+  </section>
+
+  <section class="card stack" aria-label="Public sign-up">
+    <h2 class="t2">Public sign-up</h2>
+    <p class="sub">{% if signups_open %}Anyone can ask for an account on the public page. Nothing is created until you approve it.{% else %}Closed. Nobody new can ask for an account.{% endif %}</p>
+    <form method="post" action="/admin/signups/toggle" {% if signups_open %}data-confirm="Close public sign-up? Requests already waiting stay here."{% endif %}>{{ csrf_field() }}<button class="btn">{{ "Close sign-up" if signups_open else "Open sign-up" }}</button></form>
   </section>
 
   <section class="card stack" aria-label="Admins">

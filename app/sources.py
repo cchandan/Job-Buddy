@@ -23,20 +23,41 @@ def jobspy_available():
     return importlib.util.find_spec("jobspy") is not None
 
 
-def plan():
-    """([sources to use], [(source, why not)]). This is the first thing the run log says."""
+LABELS = {"indeed": "Indeed", "linkedin": "LinkedIn", "glassdoor": "Glassdoor", "reed": "Reed", "adzuna": "Adzuna"}
+KEYED = {"reed": ("REED_API_KEY",), "adzuna": ("ADZUNA_APP_ID", "ADZUNA_APP_KEY")}
+
+
+def names():
+    """Every source that could be used, in the order the page and the run log list them."""
+    return list(JOBSPY_SITES) + list(KEYED)
+
+
+def unavailable_reason(name):
+    """Why a source cannot run on this machine, or None if it can. Separate from the admin turning it off."""
+    if name in JOBSPY_SITES:
+        return None if jobspy_available() else "JobSpy is not installed"
+    return None if all(os.getenv(k) for k in KEYED[name]) else "no key in .env (optional)"
+
+
+def plan(disabled=()):
+    """([sources to use], [(source, why not)]). This is the first thing the run log says. `disabled` is what the admin
+    has unticked on Admin > Jobs sync."""
     picked, skipped = [], [(n, why) for n, why in NOT_USED.items()]
-    for site in JOBSPY_SITES:
-        if jobspy_available():
-            picked.append(site)
+    for name in names():
+        why = unavailable_reason(name)
+        if why:
+            skipped.append((name, why))
+        elif name in disabled:
+            skipped.append((name, "turned off in Admin > Jobs sync"))
         else:
-            skipped.append((site, "JobSpy is not installed"))
-    for name, keys in (("reed", ("REED_API_KEY",)), ("adzuna", ("ADZUNA_APP_ID", "ADZUNA_APP_KEY"))):
-        if all(os.getenv(k) for k in keys):
             picked.append(name)
-        else:
-            skipped.append((name, "no key in .env (optional)"))
     return picked, skipped
+
+
+def status(disabled=()):
+    """One row per source for the admin page: {name, label, reason (why it cannot run here, or ""), enabled}."""
+    return [{"name": n, "label": LABELS.get(n, n), "reason": unavailable_reason(n) or "", "enabled": n not in disabled}
+            for n in names()]
 
 
 # ---------- helpers ----------

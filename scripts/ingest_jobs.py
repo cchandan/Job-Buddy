@@ -1,6 +1,9 @@
-"""Refresh the Job Board from your laptop: fetch, tag only what is new, publish, check old jobs.
+"""Refresh the Job Board from your laptop: fetch, tag only what is new, check old jobs, publish.
 
-    python scripts/ingest_jobs.py refresh [--as chandan]
+    python scripts/ingest_jobs.py refresh [--as chandan] [--stages scrape,liveness,publish]
+
+`--stages` runs only some steps, for example `--stages liveness` or `--stages publish`. The sources the admin has
+ticked on Admin > Jobs sync are the ones searched.
 
 Normally you just double-click `Refresh Jobs.command`, which sets everything up and runs this. Progress is saved
 as it goes, so stopping or a rate limit loses nothing: run it again to carry on.
@@ -20,20 +23,29 @@ def main():
     ap.add_argument("step", nargs="?", default="refresh", choices=["refresh"])
     ap.add_argument("--as", dest="username", help="the admin username to record the refresh against (optional)")
     ap.add_argument("--no-checks", action="store_true", help="skip the old-job page checks")
+    ap.add_argument("--stages", default=",".join(ingest.STAGES), help="which steps to run: any of scrape, liveness, publish")
     args = ap.parse_args()
+    stages = [st.strip() for st in args.stages.split(",") if st.strip()]
+    if not stages or any(st not in ingest.STAGES for st in stages):
+        sys.exit(f"--stages must be a comma-separated list of: {', '.join(ingest.STAGES)}")
+    if args.no_checks and "liveness" in stages:
+        stages.remove("liveness")
     db.init_db()
     person_id = None
     with db.SessionLocal() as s:
         if args.username:
             admin = s.query(db.Person).filter(db.Person.username == args.username.lower(), db.Person.role == "admin").first()
             person_id = admin.id if admin else None
-        if not sources.plan()[0]:
-            sys.exit("No job source is available. Run 'Refresh Jobs.command' once, or: pip install -r requirements-ingest.txt")
-        if not ingest._plan(ingest.profiles(s)):
-            sys.exit("No job titles or keywords are set. Open Admin > Jobs sync, add some to someone's search, and run this again.")
+        if "scrape" in stages:
+            if not sources.plan()[0]:
+                sys.exit("No job source is available. Run 'Refresh Jobs.command' once, or: pip install -r requirements-ingest.txt")
+            if not sources.plan(ingest.disabled_sources(s))[0]:
+                sys.exit("Every source is turned off. Open Admin > Jobs sync and tick at least one under Sources.")
+            if not ingest._plan(ingest.profiles(s)):
+                sys.exit("No job titles or keywords are set. Open Admin > Jobs sync, add some to someone's search, and run this again.")
     state = dict(ingest.STATE, running=True, stop=False)
     import threading
-    worker = threading.Thread(target=ingest.refresh, args=(person_id, state, not args.no_checks))
+    worker = threading.Thread(target=ingest.refresh, args=(person_id, state, True, tuple(stages)))
     worker.start()
     last = ""
     while worker.is_alive():

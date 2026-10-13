@@ -5,7 +5,7 @@
 <div class="head">
   <div>
     <h1 class="t">Jobs sync</h1>
-    <p class="sub">One button: find new jobs, tag only what is new, publish, and check a few old ones are still open.</p>
+    <p class="sub">Three steps, run together or one at a time: find new jobs, check old ones are still open, and publish to the live site.</p>
   </div>
   {% if can_fetch %}<span class="badge b-ok">Running on your laptop · {{ picked|length }} sources ready</span>
   {% else %}<span class="badge b-none">Live site · refreshing not available here</span>{% endif %}
@@ -33,13 +33,39 @@
   {% else %}
   <div class="head">
     <div><h2 class="t2">Refresh jobs</h2>
-      <p class="sub">{% if state.phase %}{{ state.phase }}. {{ state.message }}{% else %}Searches every source, adds only what is new, and updates the Job Board for everyone.{% endif %}</p></div>
-    <form method="post" action="/admin/sync/refresh">{{ csrf_field() }}<button class="btn btn--primary">Refresh jobs</button></form>
+      <p class="sub">{% if state.phase %}{{ state.phase }}. {{ state.message }}{% else %}Run every step in turn, or pick just one below.{% endif %}</p></div>
+    <form method="post" action="/admin/sync/refresh">{{ csrf_field() }}<button class="btn btn--primary" {{ 'disabled' if not stages.scrape[0] }}>Run all steps</button></form>
+  </div>
+  <div class="cols2" style="grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); align-items: stretch">
+    {% for key, num, title, text in [("scrape", "1", "Scrape", "Search the ticked sources and tag only what is new. Saved here as it goes."), ("liveness", "2", "Check liveness", "Look at the pages of older jobs and close the ones that are gone."), ("publish", "3", "Publish", "Send new, changed and closed jobs to the live site.")] %}
+    <div class="stack" style="border: 1px solid var(--line); border-radius: 14px; padding: 16px">
+      <div><span class="by">Step {{ num }}</span><h3 class="t3">{{ title }}</h3><p class="by">{{ text }}</p></div>
+      <form method="post" action="/admin/sync/run/{{ key }}">{{ csrf_field() }}<button class="btn" {{ 'disabled' if not stages[key][0] }}>Run {{ title|lower }} only</button></form>
+      {% if not stages[key][0] %}<p class="by">{{ stages[key][1] }}</p>{% endif %}
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
   {% for note in notes %}<div class="notice"><span>{{ note }}</span></div>{% endfor %}
   <p class="by">Tagging with: {{ backends|join(", ") if backends else "keywords only (no AI tool found)" }}. Refreshing never changes anyone's Tracker, statuses, deadlines they set, or CVs.</p>
 </section>
+
+{% if can_fetch %}
+<section class="card stack" aria-label="Sources">
+  <h2 class="t2">Sources</h2>
+  <p class="by">Tick the sites the next scrape should search. Unticked ones are skipped. A site that can't run on this machine is greyed out and says why.</p>
+  <form method="post" action="/admin/sync/sources" class="stack">
+    {{ csrf_field() }}
+    <div class="stack" style="gap: 10px">
+      {% for r in source_rows %}
+      <label class="rowx" style="gap: 10px; align-items: flex-start"><input type="checkbox" name="source" value="{{ r.name }}" {{ 'checked' if r.enabled and not r.reason }} {{ 'disabled' if r.reason }}>
+        <span><strong>{{ r.label }}</strong>{% if r.reason %} <span class="by">· not available: {{ r.reason }}</span>{% endif %}</span></label>
+      {% endfor %}
+    </div>
+    <div><button class="btn">Save sources</button></div>
+  </form>
+</section>
+{% endif %}
 
 <section class="card stack" aria-label="Tagging tools">
   <details>
@@ -67,7 +93,8 @@
   <details {% if loop.first %}open{% endif %}>
     <summary><strong>{{ run.started|when }}</strong> ·
       {% if run.status == "complete" %}<span class="badge b-ok">Complete</span>{% elif run.status == "running" %}<span class="badge b-none">Running</span>{% elif run.status == "partial" %}<span class="badge">Partial</span>{% else %}<span class="badge b-bad">Failed</span>{% endif %}
-      {% set sm = run.summary or {} %}{% if sm.new is defined %} {{ sm.new }} new · {{ sm.updated }} updated · {{ sm.seen }} unchanged · {{ sm.closed }} closed{% endif %}</summary>
+      {% set sm = run.summary or {} %}{% if sm.stages and sm.stages|length < 3 %}<span class="tag">{{ sm.stages|join(" + ") }} only</span>{% endif %}
+      {% if sm.new is defined %} {{ sm.new }} new · {{ sm.updated }} updated · {{ sm.seen }} unchanged · {{ sm.closed }} closed{% elif sm.checked is defined %} {{ sm.checked }} checked · {{ sm.closed }} closed{% elif sm.pushed %} {{ sm.pushed.sent }} sent · {{ sm.pushed.closed }} closed{% endif %}</summary>
     {% if sm.sources %}
     <div class="scroll"><table class="tb">
       <thead><tr><th>Source</th><th>Searches</th><th>Jobs returned</th><th>Result</th></tr></thead>
@@ -82,7 +109,7 @@
     </ul>
   </details>
   {% endfor %}
-  {% else %}<p class="sub">Nothing has run yet. Press Refresh jobs.</p>{% endif %}
+  {% else %}<p class="sub">Nothing has run yet. Press Run all steps.</p>{% endif %}
 </section>
 
 <section class="card stack" aria-label="Who we are searching for">
@@ -127,7 +154,7 @@
 <script>
 (function () {
   var NAMES = {indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", reed: "Reed", adzuna: "Adzuna"};
-  var PHASES = [["Planning", "Planning"], ["Fetching", "Searching"], ["Checking old jobs", "Checking old jobs"], ["Publishing", "Publishing"]];
+  var PHASES = [["Planning", "Planning", "scrape"], ["Fetching", "Searching", "scrape"], ["Checking old jobs", "Checking old jobs", "liveness"], ["Publishing", "Publishing", "publish"]];
   var STATUS = {waiting: "Waiting", running: "Searching now", done: "Done", failed: "Skipped (kept failing)"};
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, text, cls, style) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; if (style) e.style.cssText = style; return e; }
@@ -141,7 +168,7 @@
     $("lv-bar").style.width = Math.max(4, s.percent) + "%";
     $("lv-bar").parentNode.setAttribute("aria-valuenow", s.percent);
     var ph = $("lv-phases"); ph.textContent = "";
-    PHASES.forEach(function (p) { ph.appendChild(el("span", p[1], p[0] === s.phase ? "badge b-ok" : "badge b-none")); });
+    PHASES.forEach(function (p) { if ((s.stages || []).indexOf(p[2]) >= 0) ph.appendChild(el("span", p[1], p[0] === s.phase ? "badge b-ok" : "badge b-none")); });
     $("lv-now").textContent = ""; $("lv-now").appendChild(el("strong", s.now ? "Now: " + s.now : (s.phase || "Starting") + "…"));
     $("lv-counts").textContent = s.found + " jobs found · " + s.new + " new · " + s.seen + " already known";
     var box = $("lv-sources"); box.textContent = "";

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import defer
 
-from .. import ai, auth, db, deadlines, ingest, notify, runlog, sources, summary, tracking, vault, web
+from .. import ai, auth, db, deadlines, ingest, notify, push, runlog, sources, summary, tracking, vault, web
 from . import calendar as calendar_routes
 from .cv import cv_file_response
 from .home import greeting
@@ -263,12 +263,37 @@ async def assign_from_board(request: Request, database=Depends(auth.get_db), per
 
 # ---------- jobs sync ----------
 
+def stage_status(database):
+    """For each stage: (can it run right now, and if not, why). The page shows the reason under the disabled button."""
+    on_laptop = bool(sources.plan()[0])  # the fetching tools or a key exist on this machine at all
+    elsewhere = "Refreshing only works when Job Buddy is running on your laptop with the fetching tools installed."
+    out = {}
+    if not on_laptop:
+        reason = {"scrape": elsewhere, "liveness": elsewhere, "publish": elsewhere}
+    else:
+        disabled = ingest.disabled_sources(database)
+        reason = {"scrape": "", "liveness": "", "publish": ""}
+        if not sources.plan(disabled)[0]:
+            reason["scrape"] = "Every source is turned off. Tick at least one under Sources."
+        elif not ingest._plan(ingest.profiles(database)):
+            reason["scrape"] = "Add job titles or keywords to someone's search first."
+        if not push.configured():
+            reason["publish"] = ("Not needed here, or not set up: it needs INGEST_URL and INGEST_TOKEN in .env. Without them this laptop "
+                                 "writes straight to the live database, so there is nothing to publish.")
+    for stage in ingest.STAGES:
+        out[stage] = (not reason[stage], reason[stage])
+    return out
+
+
 @router.get("/sync")
 def sync_page(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
     history = database.query(db.SyncRun).order_by(db.SyncRun.at.desc()).limit(10).all()
-    picked, skipped = sources.plan()
+    disabled = ingest.disabled_sources(database)
+    picked, skipped = sources.plan(disabled)
     return web.page(request, "admin_sync.html", person, "sync", profiles=ingest.profiles(database),
-                    can_fetch=bool(picked), picked=picked, skipped=skipped, backends=[ai.backend_label(b) for b in (ai.load_tagging_order() and ai.tagging_backends())],
+                    can_fetch=bool(sources.plan()[0]), picked=picked, skipped=skipped, source_rows=sources.status(disabled),
+                    stages=stage_status(database),
+                    backends=[ai.backend_label(b) for b in (ai.load_tagging_order() and ai.tagging_backends())],
                     order=ai.tagging_order(), choices=[(b, ai.backend_label(b), ai.backend_ready(b)) for b in ai.ALL_BACKENDS],
                     state=dict(ingest.STATE), prog=ingest.progress(), runs=runlog.recent(database, 5), notes=runlog.attention(database, web.today()),
                     history=history, today_=web.today())
@@ -302,15 +327,40 @@ def sync_tagging(request: Request, pick0: str = Form(""), pick1: str = Form(""),
     return web.redirect("/admin/sync")
 
 
-@router.post("/sync/refresh")
-def sync_refresh(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
-    if not sources.plan()[0]:
-        web.flash(request, "Refreshing only works when Job Buddy is running on your laptop with the fetching tools installed.", "bad")
-    elif not ingest._plan(ingest.profiles(database)):
-        web.flash(request, "Add at least one job title or keyword to someone's search first.", "bad")
-    elif not ingest.start(person.id):
+@router.post("/sync/sources")
+async def sync_sources(request: Request, database=Depends(auth.get_db)):
+    """The tick-boxes: which sources the next scrape searches. Unavailable ones keep their setting."""
+    form = await request.form()
+    on = ingest.save_sources(database, [str(v) for v in form.getlist("source")])
+    web.flash(request, ("Sources saved: " + ", ".join(sources.LABELS.get(n, n) for n in on) + ".") if on
+              else "Sources saved: none are ticked, so a scrape cannot run until you tick one.")
+    return web.redirect("/admin/sync")
+
+
+def _run(request, database, person, stages):
+    """Start the given stages in the background, or say plainly why not."""
+    status = stage_status(database)
+    # In a full refresh, publishing is simply skipped when it is not set up, as it always has been.
+    needed = [st for st in stages if not (st == "publish" and len(stages) > 1)]
+    blocked = next((status[st][1] for st in needed if not status[st][0]), "")
+    if blocked:
+        web.flash(request, blocked, "bad")
+    elif not (ingest.start(person.id) if tuple(stages) == ingest.STAGES else ingest.start(person.id, tuple(stages))):
         web.flash(request, "A refresh is already running.", "bad")
     return web.redirect("/admin/sync")
+
+
+@router.post("/sync/refresh")
+def sync_refresh(request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    return _run(request, database, person, ingest.STAGES)
+
+
+@router.post("/sync/run/{stage}")
+def sync_run(stage: str, request: Request, database=Depends(auth.get_db), person=Depends(auth.require_admin)):
+    """Run one stage on its own: scrape, liveness or publish."""
+    if stage not in ingest.STAGES:
+        raise HTTPException(status_code=404, detail="That isn't a step of the refresh.")
+    return _run(request, database, person, (stage,))
 
 
 @router.post("/sync/stop")

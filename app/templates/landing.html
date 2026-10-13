@@ -12,12 +12,13 @@
   <meta name="apple-mobile-web-app-title" content="Job Buddy">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="description" content="Find your next opportunity with a little help. Job Buddy brings your jobs, applications, CVs and deadlines into one private workspace.">
-  <title>Your next chapter, together · Job Buddy</title>
+  <title>Your next chapter, together · Chandan’s Job Buddy</title>
+  <meta name="author" content="Chandan">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@1,9..144,500&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232536e8'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-weight='800' font-size='15' fill='%23c9f23c'%3EJB%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/landing.css?v=1">
+  <link rel="stylesheet" href="/static/landing.css?v=2">
 </head>
 <body>
 {% macro arrow() %}<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 12h15M12 5l7 7-7 7"/></svg>{% endmacro %}
@@ -85,6 +86,7 @@
   <section class="closing wrap" aria-labelledby="closing-title"><div><h2 id="closing-title">Your next chapter<br>is <em>still unwritten.</em></h2><p>Let’s make a little progress today.</p></div><div class="closing-action"><a class="action action-blue" href="/login">Sign in to Job Buddy {{ arrow() }}</a><p>New here? <a href="/signup">Request an account</a>. An admin approves every new account.</p></div></section>
 </main>
 <footer class="footer wrap"><a class="brand" href="/">Job Buddy<span class="brand-dot">.</span></a><p>A little structure. A lot of support.</p><a href="/login">Sign in {{ arrow() }}</a></footer>
+<div class="credit wrap"><p>Job Buddy is part of <strong>Chandan’s portfolio of solutions</strong>.</p><p>© {{ today.year }} Chandan</p></div>
 <script src="/static/landing.js" defer></script>
 </body>
 </html>
